@@ -44,6 +44,17 @@ const orderAPI = {
     return axiosInstance.put(`/orders/${id}/cancel`, { reason });
   },
 
+  // Request cancellation (user)
+  requestCancelOrder: (id, reason) => {
+    const safeId = encodeURIComponent(id);
+    return axiosInstance.put(`/orders/${safeId}/request-cancel`, { reason });
+  },
+
+  // Admin approve cancellation + refund
+  adminApproveCancel: (id) => {
+    return axiosInstance.put(`/admin/orders/${id}/approve-cancel`);
+  },
+
   // Get cart
   getCart: () => {
     return axiosInstance.get('/users/cart');

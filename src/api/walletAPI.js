@@ -30,6 +30,12 @@ const walletAPI = {
   createWithdrawalRequest: (data) => {
     return axiosInstance.post('/withdrawals/request', data);
   },
+  getMyWithdrawalRequests: (params = {}) => {
+    return axiosInstance.get('/withdrawals/mine', { params });
+  },
+  deleteMyWithdrawal: (id) => {
+    return axiosInstance.delete(`/withdrawals/${id}`);
+  },
 };
 
 export default walletAPI;

@@ -4,6 +4,8 @@ import { formatINR } from '../utils/formatCurrency';
 import sellerAPI from '../api/sellerAPI';
 import productAPI from '../api/productAPI';
 import axiosInstance from '../api/axiosConfig';
+import { toast } from 'react-toastify';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar } from 'recharts';
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
@@ -67,8 +69,30 @@ const AdminDashboard = () => {
     pendingWithdrawals: 0,
     processedWithdrawals: 0
   });
+  const [withdrawalSummary, setWithdrawalSummary] = useState({
+    totalRequests: 0,
+    pendingRequests: 0,
+    approvedRequests: 0,
+    processedRequests: 0
+  });
   const [sellerEarnings, setSellerEarnings] = useState([]);
+  const [vendorSearch, setVendorSearch] = useState('');
   const [withdrawalRequests, setWithdrawalRequests] = useState([]);
+  const [withdrawalEdits, setWithdrawalEdits] = useState({}); // { [id]: { status, transactionId, notes } }
+  const [cancellationRequests, setCancellationRequests] = useState([]);
+  const [withdrawalTrend, setWithdrawalTrend] = useState([]); // [{date, amount}]
+  // Admin earnings state
+  const [adminSummary, setAdminSummary] = useState({ totalCommission: 0, onlineCommission: 0, codCommission: 0, totalOrders: 0 });
+  const [adminTrend, setAdminTrend] = useState([]); // {date, amount}
+  const [adminTrendPeriod, setAdminTrendPeriod] = useState('daily');
+
+  // Reports state
+  const [salesPeriod, setSalesPeriod] = useState('daily'); // daily | monthly | yearly
+  const [salesReport, setSalesReport] = useState([]);
+  const [topVendors, setTopVendors] = useState([]);
+  const [topProducts, setTopProducts] = useState([]);
+  const [withdrawTrendPeriod, setWithdrawTrendPeriod] = useState('daily');
+  const [topVendorsPeriod, setTopVendorsPeriod] = useState('daily');
 
   // Event Banner state
   const [eventBanners, setEventBanners] = useState([]);
@@ -212,17 +236,158 @@ const AdminDashboard = () => {
     }
   };
 
+  // Build withdrawals trend (sum of amounts by requestDate)
+  const fetchWithdrawalTrend = async () => {
+    try {
+      const response = await axiosInstance.get('/withdrawals/admin', {
+        params: { status: 'all', page: 1, limit: 500 }
+      });
+      const list = response.data?.data || [];
+      const byKey = {};
+      list.forEach(w => {
+        const d = w.requestDate ? new Date(w.requestDate) : null;
+        if (!d) return;
+        let key;
+        if (withdrawTrendPeriod === 'yearly') {
+          key = `${d.getFullYear()}`;
+        } else if (withdrawTrendPeriod === 'monthly') {
+          key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+        } else {
+          key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        }
+        byKey[key] = (byKey[key] || 0) + (w.amount || 0);
+      });
+      const series = Object.keys(byKey)
+        .sort()
+        .map(k => ({ date: k, amount: byKey[k] }));
+      setWithdrawalTrend(series);
+    } catch (e) {
+      console.error('Error building withdrawal trend', e);
+      setWithdrawalTrend([]);
+    }
+  };
+
+  const fetchWithdrawalSummary = async () => {
+    try {
+      const res = await axiosInstance.get('/withdrawals/admin/summary');
+      const data = res.data?.data || res.data || {};
+      setWithdrawalSummary({
+        totalRequests: data.totalRequests || 0,
+        pendingRequests: data.pendingRequests || 0,
+        approvedRequests: data.approvedRequests || 0,
+        processedRequests: data.processedRequests || 0
+      });
+    } catch (e) {
+      console.error('Error fetching withdrawal summary', e);
+    }
+  };
+
   const fetchWithdrawalRequests = async () => {
     try {
-      const response = await axiosInstance.get('/admin/wallet/withdrawals', {
+      // Use unified withdrawals admin API with pagination + filters
+      const response = await axiosInstance.get('/withdrawals/admin', {
         params: {
           status: withdrawalStatusFilter,
           search: withdrawalSearch
         }
       });
-      setWithdrawalRequests(response.data);
+      // API returns { success, data, pagination }
+      setWithdrawalRequests(response.data?.data || []);
     } catch (error) {
       console.error('Error fetching withdrawal requests:', error);
+    }
+  };
+
+  const handleUpdateWithdrawalStatus = async (id, status, transactionId) => {
+    try {
+      let body = { status };
+      if (status === 'processed') {
+        const tx = transactionId !== undefined ? transactionId : window.prompt('Enter transaction/reference ID (optional):', '');
+        if (tx) body.transactionId = tx;
+      }
+      const prevStatus = withdrawalRequests.find(w => w._id === id)?.status;
+      await axiosInstance.put(`/withdrawals/admin/${id}/status`, body);
+      // Optimistic update for snappy UX (list)
+      setWithdrawalRequests((prev) => prev.map(w => w._id === id ? { ...w, status: body.status } : w));
+      // Optimistic update for summary counters
+      const wasProcessed = prevStatus === 'processing' || prevStatus === 'processed';
+      const nowProcessed = body.status === 'processing' || body.status === 'processed';
+      const wasPending = prevStatus === 'pending';
+      const nowPending = body.status === 'pending';
+      const wasApproved = prevStatus === 'approved';
+      const nowApproved = body.status === 'approved';
+      setWithdrawalSummary((s) => ({
+        ...s,
+        processedRequests: (s.processedRequests || 0) + (nowProcessed ? 1 : 0) - (wasProcessed ? 1 : 0),
+        pendingRequests: (s.pendingRequests || 0) + (nowPending ? 1 : 0) - (wasPending ? 1 : 0),
+        approvedRequests: (s.approvedRequests || 0) + (nowApproved ? 1 : 0) - (wasApproved ? 1 : 0),
+      }));
+      // Refresh list + summary in parallel
+      await Promise.all([fetchWithdrawalRequests(), fetchWithdrawalSummary()]);
+      toast.success(`Withdrawal ${status} successfully`);
+    } catch (e) {
+      toast.error(e.response?.data?.message || 'Failed to update status');
+    }
+  };
+
+  const handleSaveWithdrawal = async (w) => {
+    const edit = withdrawalEdits[w._id] || {};
+    const nextStatus = edit.status || w.status;
+    await handleUpdateWithdrawalStatus(w._id, nextStatus, edit.transactionId);
+    setWithdrawalEdits(prev => ({ ...prev, [w._id]: { ...prev[w._id], transactionId: '' } }));
+  };
+
+  const fetchCancellationRequests = async () => {
+    try {
+      const res = await axiosInstance.get('/admin/orders/cancellation-requests');
+      setCancellationRequests(res.data || []);
+    } catch (e) {
+      console.error('Error fetching cancellation requests', e);
+    }
+  };
+
+  // Reports fetchers
+  const fetchSalesReport = async (period = salesPeriod) => {
+    try {
+      const res = await axiosInstance.get('/admin/reports/sales', { params: { period } });
+      const data = (res.data?.data || []).map(d => ({ date: d._id, revenue: d.revenue, orders: d.orders }));
+      setSalesReport(data);
+    } catch (e) {
+      console.error('Error fetching sales report', e);
+    }
+  };
+
+  const fetchTopVendors = async () => {
+    try {
+      const res = await axiosInstance.get('/admin/reports/top-vendors', { params: { limit: 10, period: topVendorsPeriod } });
+      const data = (res.data || []).map(d => ({ name: d.shopName || (d._id || '').slice(-4), revenue: d.revenue, orders: d.orders }));
+      setTopVendors(data);
+    } catch (e) { console.error('Error fetching top vendors', e); }
+  };
+
+  const fetchTopProducts = async () => {
+    try {
+      const res = await axiosInstance.get('/admin/reports/top-products', { params: { limit: 10 } });
+      const data = (res.data || []).map(d => ({ name: d.name || (d._id || '').slice(-4), quantity: d.quantity, revenue: d.revenue }));
+      setTopProducts(data);
+    } catch (e) { console.error('Error fetching top products', e); }
+  };
+
+  const fetchAdminEarningsSummary = async () => {
+    try {
+      const res = await axiosInstance.get('/admin/wallet/admin-earnings');
+      setAdminSummary(res.data || { totalCommission: 0, onlineCommission: 0, codCommission: 0, totalOrders: 0 });
+    } catch (e) {
+      console.error('Error fetching admin earnings summary', e);
+    }
+  };
+
+  const fetchAdminEarningsTrend = async () => {
+    try {
+      const res = await axiosInstance.get('/admin/wallet/admin-earnings/trend', { params: { period: adminTrendPeriod } });
+      setAdminTrend(res.data || []);
+    } catch (e) {
+      console.error('Error fetching admin earnings trend', e);
     }
   };
 
@@ -238,7 +403,25 @@ const AdminDashboard = () => {
     fetchWalletOverview();
     fetchSellerEarnings();
     fetchWithdrawalRequests();
+    fetchWithdrawalSummary();
+
+    // Reports initial
+    fetchSalesReport('daily');
+    fetchTopVendors();
+    fetchTopProducts();
+    fetchCancellationRequests();
   }, []);
+
+  useEffect(() => {
+    fetchSalesReport(salesPeriod);
+  }, [salesPeriod]);
+
+  // Refresh cancellation requests when switching tabs to overview or orders
+  useEffect(() => {
+    if (activeTab === 'overview' || activeTab === 'orders') {
+      fetchCancellationRequests();
+    }
+  }, [activeTab]);
 
   // Fetch wallet data when tab changes
   useEffect(() => {
@@ -248,9 +431,46 @@ const AdminDashboard = () => {
         fetchSellerEarnings();
       } else if (walletTab === 'withdrawals') {
         fetchWithdrawalRequests();
+        fetchWithdrawalSummary();
+      } else if (walletTab === 'overview') {
+        // For charts within wallet overview
+        fetchSellerEarnings();
+        fetchWithdrawalTrend();
+      } else if (walletTab === 'admin-earnings') {
+        fetchAdminEarningsSummary();
+        fetchAdminEarningsTrend();
       }
     }
-  }, [activeTab, walletTab, withdrawalStatusFilter, withdrawalSearch, fetchWalletOverview, fetchSellerEarnings, fetchWithdrawalRequests]);
+  }, [activeTab, walletTab, withdrawalStatusFilter, fetchWalletOverview, fetchSellerEarnings, fetchWithdrawalRequests]);
+
+  // Debounce live search for withdrawals
+  useEffect(() => {
+    if (activeTab === 'wallet' && walletTab === 'withdrawals') {
+      const t = setTimeout(() => {
+        fetchWithdrawalRequests();
+      }, 300);
+      return () => clearTimeout(t);
+    }
+  }, [withdrawalSearch]);
+
+  // Period changes
+  useEffect(() => {
+    if (activeTab === 'wallet' && walletTab === 'overview') {
+      fetchWithdrawalTrend();
+    }
+  }, [withdrawTrendPeriod]);
+
+  useEffect(() => {
+    if (activeTab === 'wallet' && walletTab === 'overview') {
+      fetchTopVendors();
+    }
+  }, [topVendorsPeriod]);
+
+  useEffect(() => {
+    if (activeTab === 'wallet' && walletTab === 'admin-earnings') {
+      fetchAdminEarningsTrend();
+    }
+  }, [adminTrendPeriod]);
 
   // Vendor management functions
   const handleViewVendorDetails = (vendor) => {
@@ -692,7 +912,7 @@ const AdminDashboard = () => {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Total Sales</p>
-              <p className="text-2xl font-bold text-gray-800">{formatINR(typeof stats.totalSales === 'number' ? stats.totalSales * 83 : 0)}</p>
+              <p className="text-2xl font-bold text-gray-800">{formatINR(typeof stats.totalSales === 'number' ? stats.totalSales : 0)}</p>
             </div>
           </div>
         </div>
@@ -805,7 +1025,11 @@ const AdminDashboard = () => {
                 <div>
                   <h3 className="text-lg font-semibold mb-4">Recent Vendors</h3>
                   <div className="space-y-3">
-                    {vendors.slice(0, 5).map((vendor) => (
+                    {vendors
+                      .slice()
+                      .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+                      .slice(0, 5)
+                      .map((vendor) => (
                       <div key={vendor._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                         <div>
                           <p className="font-medium">{vendor.shopName}</p>
@@ -870,6 +1094,74 @@ const AdminDashboard = () => {
                     <p className="font-medium">View Orders</p>
                     <p className="text-sm text-gray-600">{stats.totalOrders} total orders</p>
                   </button>
+                </div>
+              </div>
+
+              {/* Sales Overview (moved from Wallet → Overview) */}
+              <div className="bg-white rounded-lg shadow-md p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-lg font-semibold">Sales Overview</h3>
+                  <select
+                    value={salesPeriod}
+                    onChange={e => setSalesPeriod(e.target.value)}
+                    className="border border-gray-300 text-sm rounded px-2 py-1"
+                  >
+                    <option value="daily">Daily</option>
+                    <option value="monthly">Monthly</option>
+                    <option value="yearly">Yearly</option>
+                  </select>
+                </div>
+                <div style={{ width: '100%', height: 280 }}>
+                  <ResponsiveContainer>
+                    <LineChart data={salesReport} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <Tooltip formatter={(v) => formatINR(v)} labelFormatter={(l) => `Period: ${l}`} />
+                      <Line type="monotone" dataKey="revenue" stroke="#3b82f6" strokeWidth={2} dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+                {Array.isArray(salesReport) && salesReport.length === 0 && (
+                  <p className="text-center text-sm text-gray-500 mt-2">No sales data yet. Create some orders to see the chart.</p>
+                )}
+              </div>
+
+              {/* Top Vendors & Top Products (moved from Wallet → Overview) */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-white rounded-lg shadow-md p-4">
+                  <h3 className="text-lg font-semibold mb-3">Top Vendors</h3>
+                  <div style={{ width: '100%', height: 260 }}>
+                    <ResponsiveContainer>
+                      <BarChart data={topVendors} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-20} height={50} />
+                        <YAxis tick={{ fontSize: 12 }} />
+                        <Tooltip formatter={(v) => formatINR(v)} />
+                        <Bar dataKey="revenue" fill="#10b981" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  {Array.isArray(topVendors) && topVendors.length === 0 && (
+                    <p className="text-center text-sm text-gray-500 mt-2">No vendor revenue yet.</p>
+                  )}
+                </div>
+                <div className="bg-white rounded-lg shadow-md p-4">
+                  <h3 className="text-lg font-semibold mb-3">Top Products</h3>
+                  <div style={{ width: '100%', height: 260 }}>
+                    <ResponsiveContainer>
+                      <BarChart data={topProducts} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-20} height={50} />
+                        <YAxis tick={{ fontSize: 12 }} />
+                        <Tooltip />
+                        <Bar dataKey="quantity" fill="#f59e0b" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  {Array.isArray(topProducts) && topProducts.length === 0 && (
+                    <p className="text-center text-sm text-gray-500 mt-2">No product sales yet.</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -1371,6 +1663,69 @@ const AdminDashboard = () => {
                 <h3 className="text-lg font-semibold text-gray-800">Order Management</h3>
               </div>
 
+              {/* Pending Cancellation Requests */}
+              <div className="bg-white rounded-lg shadow-md p-4 mb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold">Cancellation Requests</h4>
+                  <button className="text-sm text-blue-600" onClick={fetchCancellationRequests}>Refresh</button>
+                </div>
+                {cancellationRequests.length === 0 ? (
+                  <p className="text-sm text-gray-500">No pending requests</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left py-2 px-2">Order</th>
+                          <th className="text-left py-2 px-2">Customer</th>
+                          <th className="text-left py-2 px-2">Seller</th>
+                          <th className="text-left py-2 px-2">Total</th>
+                          <th className="text-left py-2 px-2">Reason</th>
+                          <th className="text-left py-2 px-2">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {cancellationRequests.map((o) => (
+                          <tr key={o._id} className="border-b">
+                            <td className="py-2 px-2">{o.orderNumber || o._id}</td>
+                            <td className="py-2 px-2">{o.user?.name || o.user?.email}</td>
+                            <td className="py-2 px-2">{o.seller?.shopName || '-'}</td>
+                            <td className="py-2 px-2">{formatINR(o.totalPrice || 0)}</td>
+                            <td className="py-2 px-2 max-w-[240px] truncate" title={o.cancellationRequestReason || ''}>{o.cancellationRequestReason || '-'}</td>
+                            <td className="py-2 px-2">
+                              <div className="flex gap-2">
+                                {o.cancellationRequested && o.orderStatus !== 'cancelled' && (
+                                  <button className="px-3 py-1 bg-red-600 text-white rounded text-xs" onClick={async () => {
+                                    try {
+                                      await axiosInstance.put(`/admin/orders/${o._id}/approve-cancel`);
+                                      toast.success('Cancellation approved');
+                                      fetchCancellationRequests();
+                                    } catch (e) {
+                                      toast.error(e.response?.data?.message || 'Approve failed');
+                                    }
+                                  }}>Approve</button>
+                                )}
+                                {o.refundStatus === 'pending' && o.paymentMethod !== 'cod' && (
+                                  <button className="px-3 py-1 bg-blue-600 text-white rounded text-xs" onClick={async () => {
+                                    try {
+                                      const res = await axiosInstance.put(`/admin/orders/${o._id}/refund`);
+                                      toast.success(res.data?.message || 'Refund processed');
+                                      fetchCancellationRequests();
+                                    } catch (e) {
+                                      toast.error(e.response?.data?.message || 'Refund failed');
+                                    }
+                                  }}>Refund</button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
@@ -1695,6 +2050,20 @@ const AdminDashboard = () => {
                   </div>
                   <p className="text-xs mt-1">Track vendor performance</p>
                 </button>
+                <button
+                  onClick={() => setWalletTab('admin-earnings')}
+                  className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+                    walletTab === 'admin-earnings' 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2">
+                    <FaDollarSign className="w-4 h-4" />
+                    <span>Admin Earnings</span>
+                  </div>
+                  <p className="text-xs mt-1">Platform commission summary</p>
+                </button>
               </div>
 
               {/* Overview Tab */}
@@ -1752,32 +2121,72 @@ const AdminDashboard = () => {
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* Withdrawal Trends Chart */}
                     <div className="bg-white rounded-lg shadow-md p-6">
-                      <h3 className="text-lg font-semibold text-gray-800 mb-4">Withdrawal Trends</h3>
-                      <div className="h-64 flex items-center justify-center bg-gray-50 rounded-lg">
-                        <div className="text-center">
-                          <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <FaChartLine className="text-blue-600 text-2xl" />
-                          </div>
-                          <p className="text-gray-500">No withdrawal data available</p>
-                          <p className="text-sm text-gray-400">Withdrawal trends will appear here</p>
-                        </div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-lg font-semibold text-gray-800">Withdrawal Trends</h3>
+                        <select
+                          value={withdrawTrendPeriod}
+                          onChange={(e) => setWithdrawTrendPeriod(e.target.value)}
+                          className="border border-gray-300 text-sm rounded px-2 py-1"
+                        >
+                          <option value="daily">Daily</option>
+                          <option value="monthly">Monthly</option>
+                          <option value="yearly">Yearly</option>
+                        </select>
                       </div>
+                      <div style={{ width: '100%', height: 260 }}>
+                        <ResponsiveContainer>
+                          <LineChart data={withdrawalTrend} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                            <YAxis tick={{ fontSize: 12 }} />
+                            <Tooltip formatter={(v) => formatINR(v)} labelFormatter={(l) => `Date: ${l}`} />
+                            <Line type="monotone" dataKey="amount" stroke="#3b82f6" strokeWidth={2} dot={false} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                      {withdrawalTrend.length === 0 && (
+                        <p className="text-center text-sm text-gray-500 mt-2">No withdrawal data yet.</p>
+                      )}
                     </div>
                     
                     {/* Top Vendors Chart */}
                     <div className="bg-white rounded-lg shadow-md p-6">
-                      <h3 className="text-lg font-semibold text-gray-800 mb-4">Top Vendors by Earnings</h3>
-                      <div className="h-64 flex items-center justify-center bg-gray-50 rounded-lg">
-                        <div className="text-center">
-                          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <FaUsers className="text-green-600 text-2xl" />
-                          </div>
-                          <p className="text-gray-500">No vendor earnings data</p>
-                          <p className="text-sm text-gray-400">Vendor performance will appear here</p>
-                        </div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-lg font-semibold text-gray-800">Top Vendors by Earnings</h3>
+                        <select
+                          value={topVendorsPeriod}
+                          onChange={(e) => setTopVendorsPeriod(e.target.value)}
+                          className="border border-gray-300 text-sm rounded px-2 py-1"
+                        >
+                          <option value="daily">Daily</option>
+                          <option value="monthly">Monthly</option>
+                          <option value="yearly">Yearly</option>
+                        </select>
                       </div>
+                      <div style={{ width: '100%', height: 260 }}>
+                        <ResponsiveContainer>
+                          <BarChart data={sellerEarnings
+                            .slice()
+                            .sort((a,b) => (b.totalEarnings||0) - (a.totalEarnings||0))
+                            .slice(0,5)
+                            .map(v => ({ name: v.shopName || 'Vendor', revenue: v.totalEarnings || 0 }))} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-20} height={50} />
+                            <YAxis tick={{ fontSize: 12 }} />
+                            <Tooltip formatter={(v) => formatINR(v)} />
+                            <Bar dataKey="revenue" fill="#10b981" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                      {(!sellerEarnings || sellerEarnings.length === 0) && (
+                        <p className="text-center text-sm text-gray-500 mt-2">No vendor earnings data yet.</p>
+                      )}
                     </div>
                   </div>
+
+              {/* Charts moved to Main Overview */}
+
+               {/* Cancellation Requests removed from Wallet Overview */}
                 </div>
               )}
 
@@ -1799,7 +2208,7 @@ const AdminDashboard = () => {
                               </div>
                               <div className="ml-4">
                           <p className="text-sm font-medium text-gray-600">Total Requests</p>
-                          <p className="text-2xl font-bold text-gray-800">0</p>
+                          <p className="text-2xl font-bold text-gray-800">{withdrawalSummary.totalRequests}</p>
                               </div>
                             </div>
                             </div>
@@ -1810,7 +2219,7 @@ const AdminDashboard = () => {
                               </div>
                               <div className="ml-4">
                           <p className="text-sm font-medium text-gray-600">Pending</p>
-                          <p className="text-2xl font-bold text-gray-800">0</p>
+                          <p className="text-2xl font-bold text-gray-800">{withdrawalSummary.pendingRequests}</p>
                               </div>
                             </div>
                             </div>
@@ -1821,7 +2230,7 @@ const AdminDashboard = () => {
                               </div>
                               <div className="ml-4">
                           <p className="text-sm font-medium text-gray-600">Approved</p>
-                          <p className="text-2xl font-bold text-gray-800">0</p>
+                          <p className="text-2xl font-bold text-gray-800">{withdrawalSummary.approvedRequests}</p>
                               </div>
                             </div>
                             </div>
@@ -1832,7 +2241,7 @@ const AdminDashboard = () => {
                               </div>
                               <div className="ml-4">
                           <p className="text-sm font-medium text-gray-600">Processed</p>
-                          <p className="text-2xl font-bold text-gray-800">0</p>
+                          <p className="text-2xl font-bold text-gray-800">{withdrawalSummary.processedRequests}</p>
                               </div>
                             </div>
                       </div>
@@ -1844,13 +2253,13 @@ const AdminDashboard = () => {
                       <div className="flex-1">
                         <div className="relative">
                           <FaEye className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                        <input
-                          type="text"
+                          <input
+                            type="text"
                             placeholder="Search by vendor name, email, or withdrawal ID..."
                             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          value={withdrawalSearch}
-                          onChange={(e) => setWithdrawalSearch(e.target.value)}
-                        />
+                            value={withdrawalSearch}
+                            onChange={(e) => setWithdrawalSearch(e.target.value)}
+                          />
                         </div>
                       </div>
                       <div className="md:w-48">
@@ -1861,8 +2270,9 @@ const AdminDashboard = () => {
                       >
                         <option value="all">All Statuses</option>
                         <option value="pending">Pending</option>
+                        <option value="processing">Processing</option>
                         <option value="approved">Approved</option>
-                        <option value="processed">Processed</option>
+                        <option value="paid">Paid</option>
                           <option value="rejected">Rejected</option>
                       </select>
                     </div>
@@ -1871,18 +2281,209 @@ const AdminDashboard = () => {
                                 
                   {/* Withdrawal Requests List */}
                   <div className="bg-white rounded-lg shadow-md">
-                    <div className="p-6 border-b border-gray-200">
-                      <h4 className="text-lg font-semibold text-gray-800">Withdrawal Requests (0)</h4>
-                                </div>
-                    <div className="p-6">
-                      <div className="text-center py-12">
-                        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                          <FaWallet className="text-gray-400 text-2xl" />
-                              </div>
-                        <p className="text-gray-500 text-lg">No withdrawal requests found</p>
-                        <p className="text-gray-400 text-sm">Withdrawal requests will appear here when sellers make requests</p>
-                            </div>
+                    <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+                      <h4 className="text-lg font-semibold text-gray-800">Withdrawal Requests ({withdrawalRequests.length})</h4>
+                      <button
+                        onClick={fetchWithdrawalRequests}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                      >
+                        Refresh
+                      </button>
                     </div>
+                    <div className="p-6">
+                      {withdrawalRequests.length === 0 ? (
+                        <div className="text-center py-12">
+                          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <FaWallet className="text-gray-400 text-2xl" />
+                          </div>
+                          <p className="text-gray-500 text-lg">No withdrawal requests found</p>
+                          <p className="text-gray-400 text-sm">Withdrawal requests will appear here when sellers make requests</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {withdrawalRequests.map((w) => (
+                            <div key={w._id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                                <div>
+                                  <div className="font-semibold text-gray-800 text-base">
+                                    {w.seller?.name || 'Unknown Seller'}
+                                  </div>
+                                  <div className="text-gray-600 text-sm">{w.seller?.email || '-'}</div>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                  <div className="text-gray-800 font-semibold">{formatINR(w.amount || 0)}</div>
+                                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(w.status)}`}>
+                                    {w.status}
+                                  </span>
+                                  <div className="text-gray-500 text-sm hidden md:block">
+                                    {w.requestDate ? new Date(w.requestDate).toLocaleString() : ''}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="mt-2 text-gray-500 text-sm">
+                                <div>Method: {w.paymentMethod?.replace('razorpay_', '').toUpperCase()}</div>
+                                <div className="mt-1 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1">
+                                  {w.paymentMethod === 'razorpay_bank' && (
+                                    <>
+                                      <div>Account Holder: <span className="text-gray-700">{w.paymentDetails?.accountHolderName || '-'}</span></div>
+                                      <div>Bank Name: <span className="text-gray-700">{w.paymentDetails?.bankName || '-'}</span></div>
+                                      <div>Account Number: <span className="text-gray-700">{w.paymentDetails?.accountNumber || '-'}</span></div>
+                                      <div>IFSC: <span className="text-gray-700">{w.paymentDetails?.ifscCode || '-'}</span></div>
+                                    </>
+                                  )}
+                                  {w.paymentMethod === 'razorpay_upi' && (
+                                    <div>UPI ID: <span className="text-gray-700">{w.paymentDetails?.upiId || '-'}</span></div>
+                                  )}
+                                  {w.paymentMethod === 'razorpay_wallet' && (
+                                    <>
+                                      <div>Wallet: <span className="text-gray-700">{w.paymentDetails?.walletType || '-'}</span></div>
+                                      <div>Wallet ID: <span className="text-gray-700">{w.paymentDetails?.walletId || '-'}</span></div>
+                                    </>
+                                  )}
+                                  <div>Request ID: <span className="text-gray-700 font-mono">{w._id}</span></div>
+                                </div>
+                              </div>
+                              <div className="mt-3 flex flex-col md:flex-row md:items-end gap-2 md:gap-3">
+                                <div>
+                                  <label className="block text-xs text-gray-500 mb-1">Change Status</label>
+                                  <select
+                                    className="border border-gray-300 rounded px-3 py-2 text-sm"
+                                    value={(withdrawalEdits[w._id]?.status) || w.status}
+                                    onChange={(e) => setWithdrawalEdits(prev => ({ ...prev, [w._id]: { ...prev[w._id], status: e.target.value } }))}
+                                  >
+                                    <option value="pending">pending</option>
+                                    <option value="processing">processing</option>
+                                    <option value="approved">approved</option>
+                                    <option value="paid">paid</option>
+                                    <option value="rejected">rejected</option>
+                                  </select>
+                                </div>
+                                {((withdrawalEdits[w._id]?.status) || w.status) === 'processed' && (
+                                  <div className="flex-1">
+                                    <label className="block text-xs text-gray-500 mb-1">Transaction ID (optional)</label>
+                                    <input
+                                      type="text"
+                                      className="w-full md:w-64 border border-gray-300 rounded px-3 py-2 text-sm"
+                                      placeholder="e.g., payout_123 or bank ref"
+                                      value={withdrawalEdits[w._id]?.transactionId || ''}
+                                      onChange={(e) => setWithdrawalEdits(prev => ({ ...prev, [w._id]: { ...prev[w._id], transactionId: e.target.value } }))}
+                                    />
+                                  </div>
+                                )}
+                                <button
+                                  onClick={() => handleSaveWithdrawal(w)}
+                                  className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                                >
+                                  Update
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    if (!window.confirm('Delete this withdrawal request?')) return;
+                                    try {
+                                      await axiosInstance.delete(`/withdrawals/admin/${w._id}`);
+                                      fetchWithdrawalRequests();
+                                      fetchWithdrawalSummary();
+                                    } catch (e) { console.error('Delete error', e); }
+                                  }}
+                                  className="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Admin Earnings Tab */}
+              {walletTab === 'admin-earnings' && (
+                <div className="space-y-6">
+                  {/* Header */}
+                  <div className="bg-white rounded-lg shadow-md p-6">
+                    <h3 className="text-xl font-semibold text-gray-800 mb-2">Admin Earnings (Commission)</h3>
+                    <p className="text-gray-600">Platform commission from online-paid and COD-delivered orders</p>
+                  </div>
+
+                  {/* Summary Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div className="bg-white rounded-lg shadow-md p-6">
+                      <div className="flex items-center">
+                        <div className="p-3 rounded-full bg-green-100 text-green-600">
+                          <FaDollarSign className="text-xl" />
+                        </div>
+                        <div className="ml-4">
+                          <p className="text-sm font-medium text-gray-600">Total Commission</p>
+                          <p className="text-2xl font-bold text-gray-800">{formatINR(adminSummary.totalCommission || 0)}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-white rounded-lg shadow-md p-6">
+                      <div className="flex items-center">
+                        <div className="p-3 rounded-full bg-blue-100 text-blue-600">
+                          <FaDollarSign className="text-xl" />
+                        </div>
+                        <div className="ml-4">
+                          <p className="text-sm font-medium text-gray-600">Online Commission</p>
+                          <p className="text-2xl font-bold text-gray-800">{formatINR(adminSummary.onlineCommission || 0)}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-white rounded-lg shadow-md p-6">
+                      <div className="flex items-center">
+                        <div className="p-3 rounded-full bg-yellow-100 text-yellow-600">
+                          <FaDollarSign className="text-xl" />
+                        </div>
+                        <div className="ml-4">
+                          <p className="text-sm font-medium text-gray-600">COD Commission</p>
+                          <p className="text-2xl font-bold text-gray-800">{formatINR(adminSummary.codCommission || 0)}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-white rounded-lg shadow-md p-6">
+                      <div className="flex items-center">
+                        <div className="p-3 rounded-full bg-purple-100 text-purple-600">
+                          <FaChartLine className="text-xl" />
+                        </div>
+                        <div className="ml-4">
+                          <p className="text-sm font-medium text-gray-600">Orders Count</p>
+                          <p className="text-2xl font-bold text-gray-800">{adminSummary.totalOrders || 0}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Commission Trend */}
+                  <div className="bg-white rounded-lg shadow-md p-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-lg font-semibold text-gray-800">Commission Trend</h3>
+                      <select
+                        value={adminTrendPeriod}
+                        onChange={(e) => setAdminTrendPeriod(e.target.value)}
+                        className="border border-gray-300 text-sm rounded px-2 py-1"
+                      >
+                        <option value="daily">Daily</option>
+                        <option value="monthly">Monthly</option>
+                        <option value="yearly">Yearly</option>
+                      </select>
+                    </div>
+                    <div style={{ width: '100%', height: 260 }}>
+                      <ResponsiveContainer>
+                        <LineChart data={adminTrend} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                          <YAxis tick={{ fontSize: 12 }} />
+                          <Tooltip formatter={(v) => formatINR(v)} labelFormatter={(l) => `Date: ${l}`} />
+                          <Line type="monotone" dataKey="amount" stroke="#2563eb" strokeWidth={2} dot={false} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                    {adminTrend.length === 0 && (
+                      <p className="text-center text-sm text-gray-500 mt-2">No commission data yet.</p>
+                    )}
                   </div>
                 </div>
               )}
@@ -1916,7 +2517,9 @@ const AdminDashboard = () => {
                             </div>
                         <div className="ml-4">
                           <p className="text-sm font-medium text-gray-600">Total Earnings</p>
-                          <p className="text-2xl font-bold text-gray-800">₹0.00</p>
+                          <p className="text-2xl font-bold text-gray-800">{formatINR((sellerEarnings
+                            .filter(v => (v.totalEarnings||0)>0 || (v.withdrawnAmount||0)>0 || (v.currentBalance||0)>0)
+                            .reduce((s, v) => s + (v.totalEarnings || 0), 0)))}</p>
                           </div>
                           </div>
                         </div>
@@ -1927,7 +2530,9 @@ const AdminDashboard = () => {
                               </div>
                               <div className="ml-4">
                           <p className="text-sm font-medium text-gray-600">Total Withdrawals</p>
-                          <p className="text-2xl font-bold text-gray-800">₹0.00</p>
+                          <p className="text-2xl font-bold text-gray-800">{formatINR((sellerEarnings
+                            .filter(v => (v.totalEarnings||0)>0 || (v.withdrawnAmount||0)>0 || (v.currentBalance||0)>0)
+                            .reduce((s, v) => s + (v.withdrawnAmount || 0), 0)))}</p>
                             </div>
                           </div>
                           </div>
@@ -1938,7 +2543,9 @@ const AdminDashboard = () => {
                           </div>
                         <div className="ml-4">
                           <p className="text-sm font-medium text-gray-600">Total Balance</p>
-                          <p className="text-2xl font-bold text-gray-800">₹0.00</p>
+                          <p className="text-2xl font-bold text-gray-800">{formatINR((sellerEarnings
+                            .filter(v => (v.totalEarnings||0)>0 || (v.withdrawnAmount||0)>0 || (v.currentBalance||0)>0)
+                            .reduce((s, v) => s + (v.currentBalance || 0), 0)))}</p>
                           </div>
                           </div>
                         </div>
@@ -1952,9 +2559,11 @@ const AdminDashboard = () => {
                           type="text"
                           placeholder="Search vendors..."
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          value={vendorSearch}
+                          onChange={(e) => setVendorSearch(e.target.value)}
                         />
                               </div>
-                      <button className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                      <button onClick={fetchSellerEarnings} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
                         Refresh
                       </button>
                         </div>
@@ -1963,71 +2572,84 @@ const AdminDashboard = () => {
                   {/* Vendor Earnings List */}
                   <div className="bg-white rounded-lg shadow-md">
                     <div className="p-6 border-b border-gray-200">
-                      <h4 className="text-lg font-semibold text-gray-800">Vendor Earnings ({sellerEarnings.length})</h4>
-                              </div>
+                      <h4 className="text-lg font-semibold text-gray-800">Vendor Earnings ({sellerEarnings
+                        .filter(v => (v.totalEarnings||0) > 0 || (v.withdrawnAmount||0) > 0 || (v.currentBalance||0) > 0)
+                        .filter((s) => {
+                          if (!vendorSearch.trim()) return true;
+                          const q = vendorSearch.toLowerCase();
+                          return (s.shopName || '').toLowerCase().includes(q) || (s.email || '').toLowerCase().includes(q);
+                        }).length})</h4>
+                    </div>
                     <div className="p-6">
-                      {sellerEarnings.length === 0 ? (
+                      {sellerEarnings
+                        .filter(v => (v.totalEarnings||0) > 0 || (v.withdrawnAmount||0) > 0 || (v.currentBalance||0) > 0)
+                        .filter((s) => {
+                          if (!vendorSearch.trim()) return true;
+                          const q = vendorSearch.toLowerCase();
+                          return (s.shopName || '').toLowerCase().includes(q) || (s.email || '').toLowerCase().includes(q);
+                        }).length === 0 ? (
                         <div className="text-center py-12">
                           <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                             <FaStore className="text-gray-400 text-2xl" />
-                              </div>
+                          </div>
                           <p className="text-gray-500 text-lg">No vendors found</p>
                           <p className="text-gray-400 text-sm">Vendor earnings will appear here when vendors start selling</p>
-                            </div>
+                        </div>
                       ) : (
                         <div className="space-y-4">
-                          {sellerEarnings.map((seller) => (
+                          {sellerEarnings
+                            .filter(v => (v.totalEarnings||0)>0 || (v.withdrawnAmount||0)>0 || (v.currentBalance||0)>0)
+                            .filter((s) => {
+                              if (!vendorSearch.trim()) return true;
+                              const q = vendorSearch.toLowerCase();
+                              return (s.shopName || '').toLowerCase().includes(q) || (s.email || '').toLowerCase().includes(q);
+                            })
+                            .sort((a,b) => (b.currentBalance||0) + (b.withdrawnAmount||0) - ((a.currentBalance||0) + (a.withdrawnAmount||0)))
+                            .map((seller) => (
                             <div key={seller._id} className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
                               <div className="flex items-center justify-between mb-4">
                                 <div className="flex items-center">
                                   <div className="p-3 rounded-full bg-blue-100 text-blue-600 mr-4">
                                     <FaStore className="text-xl" />
-                            </div>
+                                  </div>
                                   <div>
                                     <h5 className="font-semibold text-gray-800 text-lg">{seller.shopName}</h5>
                                     <p className="text-gray-600">{seller.email}</p>
-                            </div>
-                          </div>
+                                  </div>
+                                </div>
                                 <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(seller.isApproved ? 'approved' : 'pending')}`}>
                                   {seller.isApproved ? 'Active' : 'Pending'}
                                 </span>
-                          </div>
+                              </div>
                               
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
                                 <div className="flex items-center">
                                   <div className="p-2 rounded-full bg-green-100 text-green-600 mr-3">
                                     <FaDollarSign className="text-lg" />
-                        </div>
+                                  </div>
                                   <div>
                                     <p className="text-sm text-gray-600">Total Earnings</p>
                                     <p className="font-semibold text-gray-800">{formatINR(seller.totalEarnings)}</p>
-                      </div>
-                    </div>
+                                  </div>
+                                </div>
                                 <div className="flex items-center">
                                   <div className="p-2 rounded-full bg-yellow-100 text-yellow-600 mr-3">
                                     <FaChartLine className="text-lg" />
-                        </div>
+                                  </div>
                                   <div>
                                     <p className="text-sm text-gray-600">Withdrawals</p>
                                     <p className="font-semibold text-gray-800">{formatINR(seller.withdrawnAmount)}</p>
-                        </div>
                                   </div>
+                                </div>
                                 <div className="flex items-center">
                                   <div className="p-2 rounded-full bg-purple-100 text-purple-600 mr-3">
                                     <FaWallet className="text-lg" />
-                                    </div>
-                                    <div>
+                                  </div>
+                                  <div>
                                     <p className="text-sm text-gray-600">Current Balance</p>
                                     <p className="font-semibold text-gray-800">{formatINR(seller.currentBalance)}</p>
-                                    </div>
                                   </div>
                                 </div>
-                                
-                              <div className="flex justify-end">
-                                <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2">
-                                  <FaEye className="w-4 h-4" />
-                                  <span>View Details</span>
-                                </button>
                               </div>
                             </div>
                           ))}

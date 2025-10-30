@@ -78,7 +78,6 @@ const HeroCarousel = () => {
         className="w-full h-full hero-carousel"
         grabCursor={true}
         watchSlidesProgress={true}
-        watchslidesvisibility={true}
       >
         {slides.map((slide, idx) => (
           <SwiperSlide key={idx}>

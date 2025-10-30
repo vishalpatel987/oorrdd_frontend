@@ -58,6 +58,17 @@ const ProductDetailPage = () => {
     dispatch(addToWishlist(product._id));
   };
 
+  const handleBuyNow = async (product, quantity) => {
+    if (!isAuthenticated) {
+      navigate('/login');
+      return;
+    }
+    if (!product || !product._id) return;
+    await dispatch(addToCartAsync({ product: product._id, quantity }));
+    await dispatch(fetchCart());
+    navigate('/checkout');
+  };
+
   const handleShare = (product) => {
     navigator.clipboard.writeText(window.location.href);
     alert('Product link copied to clipboard!');
@@ -88,6 +99,7 @@ const ProductDetailPage = () => {
     <ProductDetail
       product={product}
       onAddToCart={handleAddToCart}
+      onBuyNow={handleBuyNow}
       onWishlist={handleWishlist}
       onShare={handleShare}
     />

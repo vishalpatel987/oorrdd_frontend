@@ -6,7 +6,7 @@ import productAPI from '../../api/productAPI';
 import { useNavigate } from 'react-router-dom';
 import VariantSelector from './VariantSelector';
 
-const ProductDetail = ({ product, onAddToCart, onWishlist, onShare }) => {
+const ProductDetail = ({ product, onAddToCart, onBuyNow, onWishlist, onShare }) => {
   const [quantity, setQuantity] = useState(1);
   const [selectedImage, setSelectedImage] = useState(0);
   const [selectedVariants, setSelectedVariants] = useState({});
@@ -207,6 +207,9 @@ const ProductDetail = ({ product, onAddToCart, onWishlist, onShare }) => {
             ) : (
               <span className="text-red-600 font-medium">Out of Stock</span>
             )}
+            <div className="text-sm text-gray-600 mt-1">
+              Sold: <span className="font-semibold">{Number(product.soldCount || product.totalSold || 0)}</span>
+            </div>
           </div>
           {/* Variant Selector */}
           <VariantSelector
@@ -232,20 +235,26 @@ const ProductDetail = ({ product, onAddToCart, onWishlist, onShare }) => {
               >+</button>
             </div>
           </div>
-          <div className="flex flex-col sm:flex-row gap-4 mb-4">
+          <div className="flex gap-3 mb-3">
             <button
-              onClick={() => {
-                console.log('Add to Cart button clicked', { onAddToCart, product, quantity, selectedVariants });
-                onAddToCart && onAddToCart(product, quantity, selectedVariants);
-              }}
+              onClick={() => onAddToCart && onAddToCart(product, quantity, selectedVariants)}
               disabled={currentVariantData.stock <= 0}
-              className="flex-1 bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="flex-1 bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               <FaShoppingCart /> Add to Cart
             </button>
             <button
+              onClick={() => onBuyNow && onBuyNow(product, quantity, selectedVariants)}
+              disabled={currentVariantData.stock <= 0}
+              className="flex-1 bg-orange-600 text-white py-3 px-4 rounded-lg hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+            >
+              Buy Now
+            </button>
+          </div>
+          <div className="flex gap-3 mb-4">
+            <button
               onClick={() => onWishlist && onWishlist(product)}
-              className="flex-1 border border-blue-600 text-blue-600 py-3 px-6 rounded-lg hover:bg-blue-50 flex items-center justify-center gap-2"
+              className="flex-1 border border-blue-600 text-blue-600 py-3 px-4 rounded-lg hover:bg-blue-50 flex items-center justify-center gap-2"
             >
               <FaHeart /> Wishlist
             </button>

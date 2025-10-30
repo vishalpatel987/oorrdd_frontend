@@ -97,6 +97,8 @@ const SellerDashboard = () => {
     price: '',
     comparePrice: '',
     stock: '',
+    weight: '',
+    weightUnit: 'kg',
     brand: '',
     sku: '',
     mainCategory: '',
@@ -232,50 +234,31 @@ const SellerDashboard = () => {
   const fetchWalletData = async () => {
     setWalletLoading(true);
     try {
-      // Fetch wallet balance from user data
-      const userResponse = await axiosInstance.get('/users/profile');
-      const userData = userResponse.data.data;
-      
+      // Fetch computed wallet overview from backend
+      const res = await axiosInstance.get('/sellers/wallet/overview');
+      const data = res.data || {};
       setWalletData({
-        availableBalance: userData.walletBalance || 0,
-        totalEarnings: userData.walletBalance || 0,
-        totalWithdrawn: 0, // This would come from withdrawal history
-        pendingWithdrawals: 0 // This would come from pending withdrawals
+        availableBalance: data.availableBalance || 0,
+        totalEarnings: data.totalEarnings || 0,
+        totalWithdrawn: data.totalWithdrawn || 0,
+        pendingWithdrawals: data.pendingWithdrawals || 0
       });
 
-      // Fetch transactions (mock data for now)
-      setTransactions([
-        {
-          id: '1',
-          date: new Date().toISOString(),
-          type: 'credit',
-          amount: 67.50,
-          balance: 67.50,
-          description: 'Earnings from order ORD2509050001'
-        }
-      ]);
+      // Fetch transactions (placeholder for when we implement it)
+      setTransactions([]);
 
-      // Fetch withdrawals (mock data for now)
-      setWithdrawals([
-        {
-          id: '1',
-          date: new Date(Date.now() - 86400000).toISOString(), // Yesterday
-          type: 'withdrawal',
-          amount: 50.00,
-          status: 'processed',
-          paymentMethod: 'razorpay_bank',
-          description: 'Withdrawal to Bank Account'
-        },
-        {
-          id: '2',
-          date: new Date(Date.now() - 172800000).toISOString(), // 2 days ago
-          type: 'withdrawal',
-          amount: 100.00,
-          status: 'pending',
-          paymentMethod: 'razorpay_upi',
-          description: 'Withdrawal to UPI ID'
-        }
-      ]);
+      // Fetch real withdrawals for this seller
+      const wr = await walletAPI.getMyWithdrawalRequests({ limit: 50 });
+      const wrList = (wr.data?.data || wr.data || []).map(w => ({
+        id: w._id,
+        date: w.requestDate || w.createdAt,
+        type: 'withdrawal',
+        amount: w.amount,
+        status: w.status,
+        paymentMethod: w.paymentMethod,
+        description: 'Withdrawal request'
+      }));
+      setWithdrawals(wrList);
     } catch (error) {
       console.error('Error fetching wallet data:', error);
     } finally {
@@ -288,6 +271,26 @@ const SellerDashboard = () => {
     setWalletLoading(true);
     
     try {
+      // Basic client-side validation for bank method to avoid backend 400s
+      if (withdrawalForm.paymentMethod === 'razorpay_bank') {
+        const d = withdrawalForm.paymentDetails || {};
+        if (!d.accountHolderName || !d.bankName || !d.accountNumber || !d.ifscCode) {
+          setWalletLoading(false);
+          alert('Please fill all bank details (name, bank, account number, IFSC).');
+          return;
+        }
+        if (String(d.ifscCode).length !== 11) {
+          setWalletLoading(false);
+          alert('Invalid IFSC: it must be 11 characters (e.g., SBIN0000001).');
+          return;
+        }
+        if (String(d.accountNumber).length < 9) {
+          setWalletLoading(false);
+          alert('Invalid account number: must be at least 9 digits.');
+          return;
+        }
+      }
+
       await walletAPI.createWithdrawalRequest({
         amount: parseFloat(withdrawalForm.amount),
         paymentMethod: withdrawalForm.paymentMethod,
@@ -313,6 +316,8 @@ const SellerDashboard = () => {
       fetchWalletData();
     } catch (error) {
       console.error('Error creating withdrawal request:', error);
+      const apiMsg = error.response?.data?.error || error.response?.data?.message;
+      if (apiMsg) alert(apiMsg);
     } finally {
       setWalletLoading(false);
     }
@@ -327,6 +332,8 @@ const SellerDashboard = () => {
     formData.append('price', newProduct.price);
     formData.append('comparePrice', newProduct.comparePrice);
     formData.append('stock', newProduct.stock);
+    formData.append('weight', newProduct.weight);
+    formData.append('weightUnit', newProduct.weightUnit);
     formData.append('brand', newProduct.brand);
     formData.append('sku', newProduct.sku);
     formData.append('category', newProduct.mainCategory);
@@ -340,7 +347,7 @@ const SellerDashboard = () => {
       const res = await sellerAPI.createProduct(formData, { headers: { 'Content-Type': 'multipart/form-data' } });
       setProducts([res.data, ...products]);
       setShowModal(false);
-      setNewProduct({ name: '', description: '', price: '', comparePrice: '', stock: '', brand: '', sku: '', mainCategory: '', subCategory: '', features: '', specifications: [{ key: '', value: '' }], images: [{ url: '' }] });
+      setNewProduct({ name: '', description: '', price: '', comparePrice: '', stock: '', weight: '', weightUnit: 'kg', brand: '', sku: '', mainCategory: '', subCategory: '', features: '', specifications: [{ key: '', value: '' }], images: [{ url: '' }] });
       setImageFiles([]);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to add product');
@@ -433,17 +440,24 @@ const SellerDashboard = () => {
     setEditError('');
     setEditLoading(true);
     const formData = new FormData();
-    formData.append('name', editProduct.name);
-    formData.append('description', editProduct.description);
-    formData.append('price', editProduct.price);
-    formData.append('comparePrice', editProduct.comparePrice);
-    formData.append('stock', editProduct.stock);
-    formData.append('brand', editProduct.brand);
-    formData.append('sku', editProduct.sku);
-    formData.append('category', editProduct.mainCategory);
-    formData.append('subCategory', editProduct.subCategory);
-    formData.append('features', editProduct.features);
-    formData.append('specifications', JSON.stringify(editProduct.specifications.filter(s => s.key && s.value)));
+    const appendIf = (key, val) => {
+      if (val !== undefined && val !== '') formData.append(key, val);
+    };
+    appendIf('name', editProduct.name);
+    appendIf('description', editProduct.description);
+    appendIf('price', editProduct.price);
+    appendIf('comparePrice', editProduct.comparePrice);
+    appendIf('stock', editProduct.stock);
+    appendIf('weight', editProduct.weight);
+    appendIf('weightUnit', editProduct.weightUnit);
+    appendIf('brand', editProduct.brand);
+    appendIf('sku', editProduct.sku);
+    appendIf('category', editProduct.mainCategory);
+    appendIf('subCategory', editProduct.subCategory);
+    appendIf('features', editProduct.features);
+    if (Array.isArray(editProduct.specifications)) {
+      appendIf('specifications', JSON.stringify(editProduct.specifications.filter(s => s.key && s.value)));
+    }
     if (editProduct.imageFile) {
       formData.append('image', editProduct.imageFile);
     } else if (editProduct.images && editProduct.images[0] && editProduct.images[0].url) {
@@ -454,8 +468,14 @@ const SellerDashboard = () => {
       console.log(pair[0]+ ':', pair[1]);
     }
     try {
-      const res = await sellerAPI.editProduct(editModal.product._id, formData);
-      setProducts(products.map(p => p._id === editModal.product._id ? res.data : p));
+      const res = await sellerAPI.updateProduct(editModal.product._id, formData);
+      // Use server value for immediate replacement
+      setProducts(prev => prev.map(p => p._id === editModal.product._id ? res.data : p));
+      // Hard refresh list to ensure we reflect computed fields (price with weight, etc.)
+      try {
+        const refreshed = await sellerAPI.getProducts();
+        setProducts(refreshed.data);
+      } catch {}
       setEditModal({ open: false, product: null });
     } catch (err) {
       console.error('Edit product error:', err.response);
@@ -509,7 +529,7 @@ const SellerDashboard = () => {
     <div className="container mx-auto px-4 py-8">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-800">Seller Dashboard</h1>
+        <h1 className="text-3xl font-bold text-gray-800">Vendor Dashboard</h1>
         <p className="text-gray-600 mt-2">Manage your products, orders, and business analytics</p>
       </div>
 
@@ -608,53 +628,68 @@ const SellerDashboard = () => {
           {/* Overview Tab */}
           {activeTab === 'overview' && (
             <div className="space-y-6">
+              {/* Recent Activity: show last few order events */}
               <div>
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">Recent Activity</h3>
                 <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-gray-600">No recent activity to display</p>
+                  {orders && orders.length > 0 ? (
+                    <ul className="divide-y">
+                      {orders.slice(0, 5).map((o) => (
+                        <li key={o._id} className="py-2 flex items-center justify-between">
+                          <div className="text-sm text-gray-700">
+                            <span className="font-medium">Order</span> #{o.orderNumber || o._id.slice(-6)} — {o.orderStatus}
+                          </div>
+                          <div className="text-sm text-gray-500">{new Date(o.createdAt).toLocaleString()}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-gray-600">No recent activity to display</p>
+                  )}
                 </div>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Top Selling Products */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-4">Top Selling Products</h3>
                   <div className="space-y-3">
-                    {products.slice(0, 3).map((product) => (
-                      <div key={product.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
-                        <div className="flex items-center">
-                          <img
-                            src={product.image}
-                            alt={product.name}
-                            className="w-10 h-10 object-cover rounded mr-3"
-                          />
-                          <div>
-                            <p className="font-medium text-gray-800">{product.name}</p>
-                            <p className="text-sm text-gray-600">{product.sales} sales</p>
+                    {[...products]
+                      .sort((a, b) => (b.soldCount || b.totalSold || 0) - (a.soldCount || a.totalSold || 0))
+                      .slice(0, 3)
+                      .map((product) => (
+                        <div key={product._id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                          <div className="flex items-center">
+                            <img
+                              src={(product.images && product.images[0] && product.images[0].url) ? product.images[0].url : '/product-images/default.webp'}
+                              alt={product.name}
+                              className="w-10 h-10 object-cover rounded mr-3"
+                            />
+                            <div>
+                              <p className="font-medium text-gray-800">{product.name}</p>
+                              <p className="text-sm text-gray-600">{product.soldCount || product.totalSold || 0} sold</p>
+                            </div>
                           </div>
+                          <span className="font-bold text-blue-600">{formatINR(product.price || 0)}</span>
                         </div>
-                        <span className="font-bold text-blue-600">
-                          {formatINR(product.price)}
-                        </span>
-                      </div>
-                    ))}
+                      ))}
                   </div>
                 </div>
 
+                {/* Recent Orders */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-4">Recent Orders</h3>
                   <div className="space-y-3">
-                    {orders.slice(0, 3).map((order) => (
-                      <div key={order.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                    {(orders || []).slice(0, 3).map((order) => (
+                      <div key={order._id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
                         <div>
-                          <p className="font-medium text-gray-800">{order.id}</p>
-                          <p className="text-sm text-gray-600">{order.customer}</p>
+                          <p className="font-medium text-gray-800">#{order.orderNumber || order._id.slice(-6)}</p>
+                          <p className="text-xs text-gray-500">{new Date(order.createdAt).toLocaleDateString()}</p>
                         </div>
                         <div className="text-right">
-                          <p className="font-bold text-blue-600">
-                            {formatINR(order.total)}
-                          </p>
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
-                            {order.status}
+                          <p className="font-bold text-blue-600">{formatINR(order.totalPrice || 0)}</p>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.orderStatus)}`}>
+                            {order.orderStatus}
                           </span>
                         </div>
                       </div>
@@ -732,6 +767,13 @@ const SellerDashboard = () => {
                       <input type="number" className="form-input" placeholder="Price" value={newProduct.price} onChange={e => setNewProduct({ ...newProduct, price: e.target.value })} required min="0" />
                       <input type="number" className="form-input" placeholder="Original Price (MRP)" value={newProduct.comparePrice} onChange={e => setNewProduct({ ...newProduct, comparePrice: e.target.value })} min="0" />
                       <input type="number" className="form-input" placeholder="Stock" value={newProduct.stock} onChange={e => setNewProduct({ ...newProduct, stock: e.target.value })} required min="0" />
+                      <div className="flex gap-2">
+                        <input type="number" step="0.01" className="form-input flex-1 min-w-[160px]" placeholder="Weight" value={newProduct.weight} onChange={e => setNewProduct({ ...newProduct, weight: e.target.value })} min="0" />
+                        <select className="border border-gray-300 rounded px-3 py-2 w-20" value={newProduct.weightUnit} onChange={e => setNewProduct({ ...newProduct, weightUnit: e.target.value })}>
+                          <option value="kg">kg</option>
+                          <option value="g">g</option>
+                        </select>
+                      </div>
                       <textarea className="form-input" placeholder="Description" value={newProduct.description} onChange={e => setNewProduct({ ...newProduct, description: e.target.value })} required />
                       <input type="text" className="form-input" placeholder="Key Features (comma separated)" value={newProduct.features} onChange={e => setNewProduct({ ...newProduct, features: e.target.value })} />
                       <div>
@@ -830,6 +872,11 @@ const SellerDashboard = () => {
                           </td>
                           <td className="py-3 px-4 font-medium">
                             {formatINR(product.price)}
+                            {product.shippingInfo && typeof product.shippingInfo.shippingCost === 'number' && (
+                              <div className="text-xs text-gray-500 font-normal">
+                                Base {formatINR((product.price || 0) - (product.shippingInfo.shippingCost || 0))} + Weight Charge {formatINR(product.shippingInfo.shippingCost)}
+                              </div>
+                            )}
                           </td>
                           <td className="py-3 px-4">{product.stock}</td>
                           <td className="py-3 px-4">
@@ -898,15 +945,20 @@ const SellerDashboard = () => {
                     ) : orders.map((order) => (
                       <tr key={order._id} className="border-b border-gray-100 hover:bg-gray-50">
                         <td className="py-3 px-4 font-medium text-blue-600">{order.orderNumber || order._id}</td>
-                        <td className="py-3 px-4">{order.shippingAddress?.firstName} {order.shippingAddress?.lastName}</td>
+                        <td className="py-3 px-4">{order.user?.name || order.user?.email || '-'}</td>
                         <td className="py-3 px-4 text-gray-600">{new Date(order.createdAt).toLocaleDateString()}</td>
                         <td className="py-3 px-4">{order.orderItems?.map(item => `${item.product?.name} (x${item.quantity})`).join(', ')}</td>
-                        <td className="py-3 px-4 font-medium">{formatINR(order.total)}</td>
+                        <td className="py-3 px-4 font-medium">{formatINR(order.totalPrice || 0)}</td>
                         <td className="py-3 px-4 text-xs">
-                          {order.shippingAddress?.address}, {order.shippingAddress?.city}, {order.shippingAddress?.state}, {order.shippingAddress?.pincode}
+                          {order.shippingAddress?.street}, {order.shippingAddress?.city}, {order.shippingAddress?.state}, {order.shippingAddress?.zipCode}
                         </td>
                         <td className="py-3 px-4">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.orderStatus)}`}>{order.orderStatus}</span>
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.orderStatus)}`}>{order.orderStatus}</span>
+                            {order.cancellationRequested && (
+                              <span className="px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700" title={`Reason: ${order.cancellationRequestReason || ''}`}>cancel request</span>
+                            )}
+                          </div>
                         </td>
                         <td className="py-3 px-4">
                           <div className="flex space-x-2">
@@ -930,10 +982,10 @@ const SellerDashboard = () => {
                     <div className="mb-2 text-sm text-gray-600">Date: {new Date(selectedOrder.createdAt).toLocaleString()}</div>
                     <div className="mb-2 text-sm text-gray-600">Status: <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(selectedOrder.orderStatus)}`}>{selectedOrder.orderStatus}</span></div>
                     <div className="mb-2 text-sm text-gray-600">
-                      Customer: {selectedOrder.user?.name || selectedOrder.user?.firstName || ''} {selectedOrder.user?.lastName || ''} {selectedOrder.user?.email ? `(${selectedOrder.user.email})` : ''}
+                      Customer: {selectedOrder.user?.name || selectedOrder.user?.email || '-'}
                     </div>
                     <div className="mb-2 text-sm text-gray-600">Payment: {selectedOrder.paymentMethod}</div>
-                    <div className="mb-4 text-sm text-gray-600">Shipping: {selectedOrder.shippingAddress?.firstName} {selectedOrder.shippingAddress?.lastName}, {selectedOrder.shippingAddress?.address || selectedOrder.shippingAddress?.street}, {selectedOrder.shippingAddress?.city}, {selectedOrder.shippingAddress?.state}, {selectedOrder.shippingAddress?.pincode || selectedOrder.shippingAddress?.zipCode}, {selectedOrder.shippingAddress?.country}</div>
+                    <div className="mb-4 text-sm text-gray-600">Shipping: {selectedOrder.shippingAddress?.street}, {selectedOrder.shippingAddress?.city}, {selectedOrder.shippingAddress?.state}, {selectedOrder.shippingAddress?.zipCode}, {selectedOrder.shippingAddress?.country}</div>
                     <div className="mb-4">
                       <label className="block text-sm font-medium mb-1">Update Status</label>
                       <div className="flex items-center gap-2">
@@ -941,7 +993,7 @@ const SellerDashboard = () => {
                           className="border rounded px-2 py-1"
                           value={newStatus}
                           onChange={e => setNewStatus(e.target.value)}
-                          disabled={statusUpdating}
+                          disabled={statusUpdating || selectedOrder.orderStatus === 'cancelled'}
                         >
                           {ORDER_STATUSES.map(status => (
                             <option key={status} value={status}>{status.charAt(0).toUpperCase() + status.slice(1)}</option>
@@ -950,11 +1002,14 @@ const SellerDashboard = () => {
                         <button
                           className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 disabled:opacity-50"
                           onClick={handleStatusUpdate}
-                          disabled={statusUpdating || newStatus === selectedOrder.orderStatus}
+                          disabled={statusUpdating || newStatus === selectedOrder.orderStatus || selectedOrder.orderStatus === 'cancelled'}
                         >
                           {statusUpdating ? 'Saving...' : 'Save'}
                         </button>
                       </div>
+                      {selectedOrder.orderStatus === 'cancelled' && (
+                        <div className="text-sm text-gray-500 mt-1">This order is cancelled and cannot be updated.</div>
+                      )}
                       {statusError && <div className="text-red-600 text-xs mt-1">{statusError}</div>}
                     </div>
                     <h3 className="text-lg font-semibold mb-2">Products</h3>
@@ -1235,21 +1290,37 @@ const SellerDashboard = () => {
                                     {new Date(withdrawal.date).toLocaleTimeString()}
                                   </span>
                                   <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                    withdrawal.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                                    (withdrawal.status === 'pending' || withdrawal.status === 'processing') ? 'bg-yellow-100 text-yellow-800' :
                                     withdrawal.status === 'approved' ? 'bg-blue-100 text-blue-800' :
-                                    withdrawal.status === 'processed' ? 'bg-green-100 text-green-800' :
+                                    (withdrawal.status === 'processed' || withdrawal.status === 'paid') ? 'bg-green-100 text-green-800' :
                                     'bg-red-100 text-red-800'
                                   }`}>
                                     {withdrawal.status}
                                   </span>
                                 </div>
                                 <p className="text-sm text-gray-600">{withdrawal.description}</p>
-                                <p className="text-xs text-gray-500">{withdrawal.paymentMethod}</p>
+                                <p className="text-xs text-gray-500">{({ 'razorpay_bank': 'BANK', 'razorpay_upi': 'UPI', 'razorpay_wallet': 'WALLET' }[withdrawal.paymentMethod] || withdrawal.paymentMethod)}</p>
                               </div>
                             </div>
                             <div className="text-right">
                               <div className="font-semibold text-red-600">-{formatINR(withdrawal.amount)}</div>
                               <div className="text-sm text-gray-500">Request ID: {withdrawal.id}</div>
+                              <div className="mt-2">
+                                <button
+                                  className="px-3 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700"
+                                  onClick={async () => {
+                                    if (!window.confirm('Delete this withdrawal?')) return;
+                                    try {
+                                      await walletAPI.deleteMyWithdrawal(withdrawal.id);
+                                      fetchWalletData();
+                                    } catch (e) {
+                                      console.error('Delete withdrawal failed', e);
+                                    }
+                                  }}
+                                >
+                                  Delete
+                                </button>
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -1309,6 +1380,13 @@ const SellerDashboard = () => {
               <input type="number" className="form-input" placeholder="Price" value={editProduct.price || ''} onChange={e => setEditProduct({ ...editProduct, price: e.target.value })} required min="0" />
               <input type="number" className="form-input" placeholder="Original Price (MRP)" value={editProduct.comparePrice || ''} onChange={e => setEditProduct({ ...editProduct, comparePrice: e.target.value })} min="0" />
               <input type="number" className="form-input" placeholder="Stock" value={editProduct.stock || ''} onChange={e => setEditProduct({ ...editProduct, stock: e.target.value })} required min="0" />
+              <div className="flex gap-2">
+                <input type="number" step="0.01" className="form-input flex-1 min-w-[160px]" placeholder="Weight" value={editProduct.weight || ''} onChange={e => setEditProduct({ ...editProduct, weight: e.target.value })} min="0" />
+                <select className="border border-gray-300 rounded px-3 py-2 w-20" value={editProduct.weightUnit || 'kg'} onChange={e => setEditProduct({ ...editProduct, weightUnit: e.target.value })}>
+                  <option value="kg">kg</option>
+                  <option value="g">g</option>
+                </select>
+              </div>
               <textarea className="form-input" placeholder="Description" value={editProduct.description || ''} onChange={e => setEditProduct({ ...editProduct, description: e.target.value })} required />
               <input type="text" className="form-input" placeholder="Key Features (comma separated)" value={editProduct.features || ''} onChange={e => setEditProduct({ ...editProduct, features: e.target.value })} />
               <div>

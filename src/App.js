@@ -25,7 +25,6 @@ import 'react-toastify/dist/ReactToastify.css';
 import Toast from './components/common/Toast';
 import ScrollToTop from './components/common/ScrollToTop';
 import ForgotPassword from "./pages/ForgotPassword";
-import ResetPassword from "./pages/ResetPassword";
 
 function App() {
   const dispatch = useDispatch();
@@ -105,7 +104,6 @@ function App() {
             <Route path="/register" element={<Register />} />
             <Route path="/vendor-registration" element={<VendorRegistration />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
-            <Route path="/reset-password/:token" element={<ResetPassword />} />
             <Route path="/products" element={<ProductList />} />
             <Route path="/products/:id" element={<ProductDetail />} />
             

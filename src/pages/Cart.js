@@ -32,8 +32,8 @@ const Cart = () => {
 
   // Add null checks for price calculations
   const subtotal = availableItems.reduce((sum, item) => sum + ((item.product?.price ?? 0) * (item.quantity ?? 0)), 0);
-  const shipping = subtotal > 100 ? 0 : 9.99;
-  const tax = subtotal * 0.08; // 8% tax
+  const shipping = 0; // Always free shipping for customers
+  const tax = 0; // Tax disabled: show 0 consistently across Cart and Checkout
   const total = subtotal + shipping + tax;
 
   return (

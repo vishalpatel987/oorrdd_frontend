@@ -29,6 +29,8 @@ const Profile = () => {
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [cancelError, setCancelError] = useState('');
+  const [showCancelReasonModal, setShowCancelReasonModal] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
   const [showOrderDrawer, setShowOrderDrawer] = useState(false);
 
   useEffect(() => {
@@ -109,21 +111,27 @@ const Profile = () => {
     setCancelError('');
   };
 
-  // Handler to cancel order
-  const handleCancelOrder = async () => {
+  // Open reason modal
+  const handleCancelOrder = () => {
+    setCancelReason('');
+    setShowCancelReasonModal(true);
+  };
+
+  const submitCancelReason = async () => {
     if (!selectedOrder) return;
     setCancelLoading(true);
     setCancelError('');
     try {
-      await orderAPI.cancelOrder(selectedOrder._id);
-      setSelectedOrder({ ...selectedOrder, orderStatus: 'cancelled' });
+      const idForCancel = selectedOrder.orderNumber || selectedOrder._id;
+      await orderAPI.requestCancelOrder(idForCancel, cancelReason);
       setCancelLoading(false);
+      setShowCancelReasonModal(false);
       setShowOrderModal(false);
-      // Optionally, refetch orders or update local state
+      // refresh orders to show requested flag
       const res = await orderAPI.getOrders();
       setOrders(res.data.orders || []);
     } catch (err) {
-      setCancelError(err.response?.data?.message || 'Failed to cancel order');
+      setCancelError(err.response?.data?.message || 'Failed to request cancellation');
       setCancelLoading(false);
     }
   };
@@ -413,8 +421,22 @@ const Profile = () => {
                     </table>
                   </div>
                   <div className="text-right font-bold text-lg mb-4">Total: {formatINR(selectedOrder.total || selectedOrder.totalPrice)}</div>
+                  {/* Refund/Cancellation status hints for the user */}
+                  {selectedOrder.cancellationRequested && selectedOrder.orderStatus !== 'cancelled' && (
+                    <div className="text-yellow-600 text-sm mb-3">Cancellation requested. Awaiting admin approval.</div>
+                  )}
+                  {selectedOrder.orderStatus === 'cancelled' && selectedOrder.paymentMethod !== 'cod' && (
+                    <>
+                      {selectedOrder.refundStatus === 'pending' && (
+                        <div className="text-yellow-600 text-sm mb-3">Refund initiated to your original payment method (Razorpay). It may take 5-7 business days to reflect.</div>
+                      )}
+                      {(selectedOrder.paymentStatus === 'refunded' || selectedOrder.refundStatus === 'refunded') && (
+                        <div className="text-green-600 text-sm mb-3">Refund received successfully to your original payment method.</div>
+                      )}
+                    </>
+                  )}
                   {/* Cancel Order Button */}
-                  {['pending', 'confirmed', 'processing'].includes(selectedOrder.orderStatus) && (
+                  {['pending', 'confirmed', 'processing'].includes(selectedOrder.orderStatus) && !selectedOrder.cancellationRequested && (
                     <div className="mb-2">
                       <button
                         className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:opacity-50"
@@ -426,9 +448,28 @@ const Profile = () => {
                       {cancelError && <div className="text-red-600 text-xs mt-1">{cancelError}</div>}
                     </div>
                   )}
+                  {/* The above messages already cover cancellation + refund states; avoid duplicate notice here */}
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Reason Modal */}
+      {showCancelReasonModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md mx-2 relative">
+            <button className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 text-2xl" onClick={() => setShowCancelReasonModal(false)}>&times;</button>
+            <h3 className="text-lg font-semibold mb-3">Cancel Order</h3>
+            <label className="block text-sm font-medium mb-1">Reason for cancellation</label>
+            <textarea className="w-full border rounded p-2 h-28" value={cancelReason} onChange={e => setCancelReason(e.target.value)} placeholder="Please write your reason" />
+            <div className="flex justify-end gap-2 mt-3">
+              <button className="px-4 py-2 bg-gray-200 rounded" onClick={() => setShowCancelReasonModal(false)}>Close</button>
+              <button className="px-4 py-2 bg-red-600 text-white rounded disabled:opacity-50" onClick={submitCancelReason} disabled={cancelLoading || !cancelReason.trim()}>
+                {cancelLoading ? 'Submitting...' : 'Submit Request'}
+              </button>
+            </div>
           </div>
         </div>
       )}
