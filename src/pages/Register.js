@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { FaEye, FaEyeSlash, FaGoogle, FaFacebook } from 'react-icons/fa';
-import { register, clearError } from '../redux/slices/authSlice';
+import { registerStart, verifyRegistrationOTP, clearError } from '../redux/slices/authSlice';
 import { toast } from 'react-toastify';
 
 const Register = () => {
@@ -16,11 +16,13 @@ const Register = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState({});
+  const [otpPhase, setOtpPhase] = useState(false);
+  const [otp, setOtp] = useState('');
 
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
-  const { loading, error, isAuthenticated } = useSelector((state) => state.auth);
+  const { loading, error, isAuthenticated, pendingRegistrationEmail } = useSelector((state) => state.auth);
 
   // Parse redirect param from query string
   const searchParams = new URLSearchParams(location.search);
@@ -93,14 +95,30 @@ const Register = () => {
     if (validateForm()) {
       try {
         const { confirmPassword, ...registrationData } = formData;
-        await dispatch(register(registrationData)).unwrap();
-        toast.success('Registration successful! Welcome to MV Store!');
+        await dispatch(registerStart(registrationData)).unwrap();
+        setOtpPhase(true);
+        toast.success('OTP sent to your email. Please verify to activate your account.');
       } catch (error) {
         // Error is handled in useEffect for known errors
         if (!error || typeof error !== 'string') {
           toast.error('Network error. Please check your connection or try again later.');
         }
       }
+    }
+  };
+
+  const handleVerifyOTP = async (e) => {
+    e.preventDefault();
+    const email = pendingRegistrationEmail || formData.email;
+    if (!otp || otp.trim().length !== 6) {
+      toast.error('Enter the 6-digit OTP sent to your email');
+      return;
+    }
+    try {
+      await dispatch(verifyRegistrationOTP({ email, otp: otp.trim() })).unwrap();
+      toast.success('Registration successful! Welcome to MV Store!');
+    } catch (err) {
+      // Error toasts handled by useEffect
     }
   };
 
@@ -127,6 +145,7 @@ const Register = () => {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+          {!otpPhase ? (
           <form className="space-y-6" onSubmit={handleSubmit}>
             {/* Name Field */}
             <div>
@@ -308,6 +327,37 @@ const Register = () => {
               </button>
             </div>
           </form>
+          ) : (
+            <form className="space-y-6" onSubmit={handleVerifyOTP}>
+              <div className="text-center">
+                <h3 className="text-xl font-semibold text-gray-900">Verify your email</h3>
+                <p className="mt-2 text-sm text-gray-600">We sent a 6-digit code to <span className="font-medium">{pendingRegistrationEmail || formData.email}</span>. Enter it below to complete registration.</p>
+              </div>
+              <div>
+                <label htmlFor="otp" className="form-label">Enter OTP</label>
+                <input
+                  id="otp"
+                  name="otp"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="^[0-9]{6}$"
+                  maxLength={6}
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/[^0-9]/g, ''))}
+                  className="form-input tracking-widest text-center text-lg"
+                  placeholder="______"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? 'Verifying...' : 'Verify and Create Account'}
+              </button>
+              <p className="text-sm text-gray-500 text-center">Didn't receive the code? Check spam or wait a minute and try again.</p>
+            </form>
+          )}
 
          
 

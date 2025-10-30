@@ -11,12 +11,34 @@ const normalize = name =>
     .trim();
 
 const categoryImageMap = {
-  electronics: './images/electronics.jpeg',
-  homeandkitchen: './images/home and kitchen.jpeg',
-  beautyandpersonalcare: './images/beauty and personal care.jpeg',
-  clothingshoesandjewelry: './images/clothing shoose.jpeg',
-  sportsandoutdoors: './images/sport and outdoor.jpeg',
-  toysandgames: './images/toy and game.jpeg',
+  electronics: '/images/electronics.jpeg',
+  homeandkitchen: '/images/home and kitchen.jpeg',
+  beautyandpersonalcare: '/images/beauty and personal care.jpeg',
+  clothingshoesandjewelry: '/images/clothing shoose.jpeg',
+  sportsandoutdoors: '/images/sport and outdoor.jpeg',
+  toysandgames: '/images/toy and game.jpeg',
+  // Additional common categories without dedicated images use banners as fallback
+  books: '/images/banner_1.jpg',
+  automotive: '/images/banner_2.jpg',
+  petsupplies: '/images/banner_3.jpg',
+  healthhousehold: '/images/banner_2.jpg',
+};
+
+// Resolve which image to show for a category or subcategory
+const getCategoryImage = (cat, allCategories) => {
+  if (!cat) return '/images/logo.png';
+  if (cat.image) return cat.image;
+  const mapped = categoryImageMap[normalize(cat.name)];
+  if (mapped) return mapped;
+  if (cat.parentCategory) {
+    const parent = allCategories.find(c => c._id === cat.parentCategory);
+    if (parent) {
+      if (parent.image) return parent.image;
+      const parentMapped = categoryImageMap[normalize(parent.name)];
+      if (parentMapped) return parentMapped;
+    }
+  }
+  return '/images/logo.png';
 };
 
 const Categories = () => {
@@ -56,15 +78,11 @@ const Categories = () => {
                 >
                   <div className="relative bg-gray-100 rounded-lg p-6 text-center hover:bg-primary-50 transition-colors overflow-hidden h-48 flex flex-col justify-end items-center">
                     <img
-                      src={
-                        subcat.image ||
-                        categoryImageMap[normalize(subcat.name)] ||
-                        '/default-category.png'
-                      }
+                      src={getCategoryImage(subcat, categories)}
                       alt={subcat.name || 'Subcategory'}
                       onError={e => {
-                        if (!e.target.src.endsWith('/default-category.png')) {
-                          e.target.src = '/default-category.png';
+                        if (!e.target.src.endsWith('/images/logo.png')) {
+                          e.target.src = '/images/logo.png';
                         }
                       }}
                       className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-110 z-0"
@@ -90,15 +108,11 @@ const Categories = () => {
               >
                 <div className="relative bg-gray-100 rounded-lg p-6 text-center hover:bg-primary-50 transition-colors overflow-hidden h-48 flex flex-col justify-end items-center">
                   <img
-                    src={
-                      cat.image ||
-                      categoryImageMap[normalize(cat.name)] ||
-                      '/default-category.png'
-                    }
+                    src={getCategoryImage(cat, categories)}
                     alt={cat.name || 'Category'}
                     onError={e => {
-                      if (!e.target.src.endsWith('/default-category.png')) {
-                        e.target.src = '/default-category.png';
+                      if (!e.target.src.endsWith('/images/logo.png')) {
+                        e.target.src = '/images/logo.png';
                       }
                     }}
                     className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-110 z-0"

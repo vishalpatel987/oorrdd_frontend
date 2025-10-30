@@ -28,6 +28,33 @@ export const register = createAsyncThunk(
   }
 );
 
+// New: start registration (send OTP)
+export const registerStart = createAsyncThunk(
+  'auth/registerStart',
+  async (userData, { rejectWithValue }) => {
+    try {
+      const response = await authAPI.registerStart(userData);
+      return response.data; // { message, email }
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to start registration');
+    }
+  }
+);
+
+// New: verify registration OTP
+export const verifyRegistrationOTP = createAsyncThunk(
+  'auth/verifyRegistrationOTP',
+  async (payload, { rejectWithValue }) => {
+    try {
+      const response = await authAPI.registerVerify(payload); // { email, otp }
+      localStorage.setItem('token', response.data.token);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'OTP verification failed');
+    }
+  }
+);
+
 export const getCurrentUser = createAsyncThunk(
   'auth/getCurrentUser',
   async (_, { rejectWithValue }) => {
@@ -54,6 +81,7 @@ const initialState = {
   isAuthenticated: false,
   loading: false,
   error: null,
+  pendingRegistrationEmail: null,
 };
 
 const authSlice = createSlice({
@@ -96,6 +124,35 @@ const authSlice = createSlice({
         state.token = action.payload.token;
       })
       .addCase(register.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      // Register Start (OTP send)
+      .addCase(registerStart.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(registerStart.fulfilled, (state, action) => {
+        state.loading = false;
+        state.pendingRegistrationEmail = action.payload.email;
+      })
+      .addCase(registerStart.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      // Verify Registration OTP
+      .addCase(verifyRegistrationOTP.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(verifyRegistrationOTP.fulfilled, (state, action) => {
+        state.loading = false;
+        state.isAuthenticated = true;
+        state.user = action.payload.user;
+        state.token = action.payload.token;
+        state.pendingRegistrationEmail = null;
+      })
+      .addCase(verifyRegistrationOTP.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
       })

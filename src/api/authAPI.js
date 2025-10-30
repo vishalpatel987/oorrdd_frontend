@@ -6,6 +6,14 @@ const authAPI = {
     return axiosInstance.post('/auth/register', userData);
   },
 
+  // New: Registration with email OTP
+  registerStart: (userData) => {
+    return axiosInstance.post('/auth/register/start', userData);
+  },
+  registerVerify: (payload) => {
+    return axiosInstance.post('/auth/register/verify', payload); // { email, otp }
+  },
+
   // Login user
   login: (credentials) => {
     return axiosInstance.post('/auth/login', credentials);
