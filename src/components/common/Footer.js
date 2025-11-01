@@ -107,7 +107,7 @@ const Footer = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="flex items-center space-x-2">
               <FaPhone className="text-primary-400" />
-              <span className="text-gray-300">+1 (555) 123-4567</span>
+              <span className="text-gray-300">+91 9038045143</span>
             </div>
             <div className="flex items-center space-x-2">
               <FaEnvelope className="text-primary-400" />
@@ -115,7 +115,7 @@ const Footer = () => {
             </div>
             <div className="flex items-center space-x-2">
               <FaMapMarkerAlt className="text-primary-400" />
-              <span className="text-gray-300">123 E-commerce St, Digital City</span>
+              <span className="text-gray-300">33, New Alipore, Kolkata 700053</span>
             </div>
           </div>
         </div>

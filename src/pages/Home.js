@@ -164,30 +164,34 @@ const Home = () => {
             ))}
           </div>
 
-          {/* Mobile Carousel Layout */}
+          {/* Mobile Layout - Show one full item at a time with autoplay */}
           <div className="md:hidden">
             <Swiper
-              modules={[Pagination]}
-              spaceBetween={12}
+              modules={[Autoplay, Pagination]}
+              spaceBetween={16}
               slidesPerView={1}
               centeredSlides={true}
+              autoplay={{
+                delay: 1500,
+                disableOnInteraction: false,
+              }}
               pagination={{
                 clickable: true,
                 dynamicBullets: true,
               }}
-              loop={false}
+              loop={true}
               className="features-swiper"
             >
               {features.map((feature, index) => (
                 <SwiperSlide key={index}>
-                  <div className="text-center bg-white rounded-xl p-4 shadow-lg border border-gray-200 mx-2">
+                  <div className="text-center bg-white rounded-xl p-4 shadow-lg border border-gray-200 mx-auto max-w-sm">
                     <div className="text-primary-600 mb-3 flex justify-center">
-                      <div className="text-2xl">
+                      <div className="text-3xl">
                         {feature.icon}
                       </div>
                     </div>
                     <h3 className="text-base font-bold mb-2 text-gray-800">{feature.title}</h3>
-                    <p className="text-gray-600 text-xs leading-relaxed">{feature.description}</p>
+                    <p className="text-gray-600 text-sm leading-relaxed">{feature.description}</p>
                   </div>
                 </SwiperSlide>
               ))}

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { FaLock, FaCreditCard, FaPaypal, FaApplePay, FaGooglePay, FaMoneyBillWave } from 'react-icons/fa';
+import { FaLock, FaCreditCard, FaPaypal, FaApplePay, FaGooglePay, FaMoneyBillWave, FaTruck, FaCalendarAlt, FaMapMarkerAlt, FaCheck } from 'react-icons/fa';
 import { formatINR } from '../utils/formatCurrency';
 import { useSelector, useDispatch } from 'react-redux';
 import { createOrder } from '../redux/slices/orderSlice';
@@ -8,6 +8,8 @@ import { fetchCart, clearCart } from '../redux/slices/cartSlice';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import orderAPI from '../api/orderAPI';
+import axiosInstance from '../api/axiosConfig';
+import ShippingAddresses from '../components/ShippingAddresses';
 
 const INDIAN_STATES = [
   'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat', 'Haryana',
@@ -45,10 +47,121 @@ const Checkout = () => {
   const [discount, setDiscount] = useState(0);
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [estimatedDeliveryDate, setEstimatedDeliveryDate] = useState(null);
+  const [savedAddresses, setSavedAddresses] = useState([]);
+  const [selectedAddressId, setSelectedAddressId] = useState(null);
+  const [showAddressModal, setShowAddressModal] = useState(false);
+  const [showManualForm, setShowManualForm] = useState(false);
 
   useEffect(() => {
     dispatch(fetchCart());
   }, [dispatch]);
+
+  // Load saved addresses from localStorage
+  useEffect(() => {
+    const savedAddresses = localStorage.getItem('shippingAddresses');
+    if (savedAddresses) {
+      try {
+        const addresses = JSON.parse(savedAddresses);
+        setSavedAddresses(addresses);
+      } catch (e) {
+        console.error('Error loading saved addresses:', e);
+      }
+    }
+  }, []);
+
+  // Auto-fill form when saved address is selected
+  useEffect(() => {
+    if (selectedAddressId && savedAddresses.length > 0) {
+      const selectedAddress = savedAddresses.find(addr => addr.id === selectedAddressId);
+      if (selectedAddress) {
+        setFormData({
+          firstName: selectedAddress.name?.split(' ')[0] || '',
+          lastName: selectedAddress.name?.split(' ').slice(1).join(' ') || '',
+          email: user?.email || '',
+          phone: selectedAddress.phone || '',
+          address: selectedAddress.address || '',
+          city: selectedAddress.city || '',
+          state: selectedAddress.state || '',
+          pincode: selectedAddress.pincode || '',
+          country: selectedAddress.country || 'India',
+        });
+        setShowManualForm(false);
+      }
+    }
+  }, [selectedAddressId, savedAddresses, user?.email]);
+
+  // Recalculate delivery date when location changes
+  useEffect(() => {
+    const { city, state, pincode } = formData;
+    
+    // If location details are not filled, don't show delivery date
+    if (!city || !state || !pincode) {
+      setEstimatedDeliveryDate(null);
+      return;
+    }
+
+    // Metro cities and major cities typically have faster delivery (3-5 days)
+    const metroCities = [
+      'Mumbai', 'Delhi', 'Bangalore', 'Hyderabad', 'Chennai', 'Kolkata', 
+      'Pune', 'Ahmedabad', 'Jaipur', 'Surat', 'Lucknow', 'Kanpur', 
+      'Nagpur', 'Indore', 'Thane', 'Bhopal', 'Visakhapatnam', 'Patna', 
+      'Vadodara', 'Ghaziabad', 'Ludhiana', 'Agra', 'Nashik', 'Faridabad',
+      'Meerut', 'Rajkot', 'Varanasi', 'Srinagar', 'Amritsar', 'Noida'
+    ];
+
+    const cityLower = city.toLowerCase().trim();
+    const isMetroCity = metroCities.some(metro => metro.toLowerCase() === cityLower);
+    
+    // Check pincode first digit to determine region
+    const pincodeFirstDigit = parseInt(pincode.charAt(0)) || 0;
+    
+    // Determine delivery days based on location
+    let deliveryDays = 7; // Default: 7 days
+    
+    if (isMetroCity) {
+      // Metro cities: 3-5 days (use average: 4 days)
+      deliveryDays = 4;
+    } else if (pincodeFirstDigit >= 1 && pincodeFirstDigit <= 6) {
+      // Northern, Western, Central regions: 5-7 days (use average: 6 days)
+      deliveryDays = 6;
+    } else if (pincodeFirstDigit === 7 || pincodeFirstDigit === 8) {
+      // Eastern and North-Eastern regions: 7-10 days (use average: 8 days)
+      deliveryDays = 8;
+    } else {
+      // Other regions: 7-9 days (use average: 8 days)
+      deliveryDays = 8;
+    }
+
+    // Calculate delivery date (excluding Sundays)
+    const today = new Date();
+    let daysToAdd = deliveryDays;
+    let deliveryDate = new Date(today);
+    
+    // Add business days (excluding Sundays)
+    while (daysToAdd > 0) {
+      deliveryDate.setDate(deliveryDate.getDate() + 1);
+      // Skip Sundays (0 = Sunday)
+      if (deliveryDate.getDay() !== 0) {
+        daysToAdd--;
+      }
+    }
+
+    // Format date
+    const options = { 
+      weekday: 'long', 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    };
+    const formattedDate = deliveryDate.toLocaleDateString('en-IN', options);
+    
+    setEstimatedDeliveryDate({
+      date: deliveryDate,
+      formattedDate: formattedDate,
+      days: deliveryDays
+    });
+  }, [formData.city, formData.state, formData.pincode]);
 
   // Load Razorpay script
   const loadRazorpayScript = () => {
@@ -136,6 +249,8 @@ const Checkout = () => {
             const verifyResponse = await orderAPI.createOrderWithPayment(orderData);
 
             if (verifyResponse.data.success) {
+              // Save address to localStorage after successful order
+              saveCurrentAddressToStorage();
               dispatch(clearCart());
               toast.success('Payment successful! Order placed successfully!');
               navigate('/profile');
@@ -208,6 +323,8 @@ const Checkout = () => {
 
         const result = await dispatch(createOrder(orderData));
         if (!result.error) {
+          // Save address to localStorage after successful order
+          saveCurrentAddressToStorage();
           dispatch(clearCart());
           toast.success('Order placed successfully!');
           navigate('/profile');
@@ -223,19 +340,89 @@ const Checkout = () => {
     }
   };
 
-  // Dummy coupon logic (replace with real API if needed)
+  // Save current form address to localStorage
+  const saveCurrentAddressToStorage = () => {
+    if (!formData.firstName || !formData.phone || !formData.address || !formData.city || !formData.state || !formData.pincode) {
+      return; // Don't save incomplete addresses
+    }
+
+    const newAddress = {
+      name: `${formData.firstName} ${formData.lastName}`.trim(),
+      phone: formData.phone,
+      address: formData.address,
+      city: formData.city,
+      state: formData.state,
+      pincode: formData.pincode,
+      country: formData.country || 'India',
+      type: 'home'
+    };
+
+    const savedAddresses = localStorage.getItem('shippingAddresses');
+    let addresses = [];
+    if (savedAddresses) {
+      try {
+        addresses = JSON.parse(savedAddresses);
+      } catch (e) {
+        console.error('Error parsing saved addresses:', e);
+      }
+    }
+
+    // Check if address already exists (by comparing key fields)
+    const addressExists = addresses.some(addr =>
+      addr.address === newAddress.address &&
+      addr.city === newAddress.city &&
+      addr.pincode === newAddress.pincode &&
+      addr.phone === newAddress.phone
+    );
+
+    if (!addressExists) {
+      newAddress.id = Date.now().toString();
+      addresses.push(newAddress);
+      localStorage.setItem('shippingAddresses', JSON.stringify(addresses));
+      setSavedAddresses(addresses);
+      toast.success('Address saved to your shipping addresses');
+    }
+  };
+
+  // Handle address selection from saved addresses
+  const handleSelectAddress = (address) => {
+    setSelectedAddressId(address.id);
+    setShowAddressModal(false);
+    toast.success('Address selected');
+  };
+
+  // Handle manual form input
+  const handleManualFormToggle = () => {
+    setShowManualForm(true);
+    setSelectedAddressId(null);
+    // Keep current form data
+  };
+
+  // Real coupon application using backend API
   const handleApplyCoupon = async () => {
     setCouponStatus('');
     setDiscount(0);
     setAppliedCoupon(null);
     if (!coupon) return;
-    // Simulate coupon
-    if (coupon === 'INDIA10') {
-      setDiscount(0.1 * total);
-      setAppliedCoupon(coupon);
+    try {
+      const { data } = await axiosInstance.post('/coupons/apply', { code: coupon });
+      const couponDiscount = Number(data.discount) || 0;
+      // If discount <= 100, treat as percentage; otherwise flat amount in INR
+      let computed = 0;
+      if (couponDiscount > 0 && couponDiscount <= 100) {
+        computed = Math.round((couponDiscount / 100) * total);
+      } else if (couponDiscount > 100) {
+        computed = Math.min(couponDiscount, total);
+      }
+      if (computed <= 0) {
+        setCouponStatus('Invalid coupon');
+        return;
+      }
+      setDiscount(computed);
+      setAppliedCoupon(String(coupon).trim().toUpperCase());
       setCouponStatus('Coupon applied!');
-    } else {
-      setCouponStatus('Invalid coupon');
+    } catch (e) {
+      setCouponStatus(e.response?.data?.message || 'Invalid coupon');
     }
   };
 
@@ -243,7 +430,7 @@ const Checkout = () => {
     <div className="container mx-auto px-4 py-8">
       {/* Header */}
       <div className="mb-8">
-        <div className="flex items-center mb-4">
+        <div className="hidden md:flex items-center mb-4">
           <Link to="/cart" className="text-blue-600 hover:text-blue-800">
             ← Back to Cart
           </Link>
@@ -257,8 +444,74 @@ const Checkout = () => {
           <form onSubmit={handleSubmit} className="space-y-8">
             {/* Shipping Information */}
             <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4">Shipping Information</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold text-gray-800">Shipping Information</h2>
+                <button
+                  type="button"
+                  onClick={() => setShowAddressModal(true)}
+                  className="flex items-center gap-2 text-blue-600 hover:text-blue-800 text-sm font-medium"
+                >
+                  <FaMapMarkerAlt />
+                  Manage Addresses
+                </button>
+              </div>
+
+              {/* Saved Addresses Selection */}
+              {savedAddresses.length > 0 && (
+                <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Select Saved Address</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                    {savedAddresses.map((address) => (
+                      <div
+                        key={address.id}
+                        className={`p-3 border-2 rounded-lg cursor-pointer transition-all ${
+                          selectedAddressId === address.id
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'border-gray-200 hover:border-blue-300'
+                        }`}
+                        onClick={() => handleSelectAddress(address)}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <FaMapMarkerAlt className={`text-sm ${
+                                selectedAddressId === address.id ? 'text-blue-600' : 'text-gray-400'
+                              }`} />
+                              <span className="font-medium text-gray-800">{address.name}</span>
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                                address.type === 'home' ? 'bg-green-100 text-green-700' :
+                                address.type === 'work' ? 'bg-blue-100 text-blue-700' :
+                                'bg-gray-100 text-gray-700'
+                              }`}>
+                                {address.type === 'home' ? 'Home' : address.type === 'work' ? 'Work' : 'Other'}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-600">{address.address}</p>
+                            <p className="text-sm text-gray-600">
+                              {address.city}, {address.state} - {address.pincode}
+                            </p>
+                            <p className="text-sm text-gray-600">Phone: {address.phone}</p>
+                          </div>
+                          {selectedAddressId === address.id && (
+                            <FaCheck className="text-blue-600 text-lg flex-shrink-0 ml-2" />
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleManualFormToggle}
+                    className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                  >
+                    + Add New Address Manually
+                  </button>
+                </div>
+              )}
+
+              {/* Manual Form or Form when no saved addresses */}
+              {(!savedAddresses.length || showManualForm || !selectedAddressId) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">First Name</label>
                   <input type="text" name="firstName" value={formData.firstName} onChange={handleInputChange} required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
@@ -299,6 +552,7 @@ const Checkout = () => {
                   <input type="text" name="country" value={formData.country} disabled className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100" />
                 </div>
               </div>
+              )}
             </div>
             {/* Payment Method */}
             <div className="bg-white rounded-lg shadow-md p-6">
@@ -366,9 +620,9 @@ const Checkout = () => {
             {/* Coupon Code Input */}
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">Coupon Code</label>
-              <div className="flex gap-2">
-                <input type="text" value={coupon} onChange={e => setCoupon(e.target.value)} className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Enter coupon code" />
-                <button type="button" onClick={handleApplyCoupon} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">Apply</button>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input type="text" value={coupon} onChange={e => setCoupon(e.target.value)} className="sm:flex-1 w-full min-w-0 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Enter coupon code" />
+                <button type="button" onClick={handleApplyCoupon} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 w-full sm:w-auto">Apply</button>
               </div>
               {couponStatus && <div className={`mt-1 text-sm ${discount ? 'text-green-600' : 'text-red-600'}`}>{couponStatus}</div>}
             </div>
@@ -384,6 +638,20 @@ const Checkout = () => {
                 </div>
               ))}
             </div>
+            {/* Estimated Delivery Date */}
+            {estimatedDeliveryDate && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                <div className="flex items-start gap-3">
+                  <FaCalendarAlt className="text-blue-600 text-xl mt-1 flex-shrink-0" />
+                  <div className="flex-1">
+                    <h3 className="text-sm font-semibold text-blue-900 mb-1">Estimated Delivery</h3>
+                    <p className="text-sm text-blue-700 font-medium">{estimatedDeliveryDate.formattedDate}</p>
+                    <p className="text-xs text-blue-600 mt-1">Delivery in approximately {estimatedDeliveryDate.days} business days</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Totals */}
             <div className="border-t pt-4 space-y-3 mb-6">
               <div className="flex justify-between">
@@ -413,12 +681,31 @@ const Checkout = () => {
             </div>
             <div className="mt-4 text-sm text-gray-600">
               <p className="mb-2">✓ Secure checkout with SSL encryption</p>
-              <p className="mb-2">✓ 7-day return policy</p>
+              <p className="mb-2">✓ 10-day return policy</p>
               <p>✓ Free shipping on all orders</p>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Shipping Addresses Modal */}
+      <ShippingAddresses
+        isOpen={showAddressModal}
+        onClose={() => {
+          setShowAddressModal(false);
+          // Reload saved addresses when modal closes
+          const savedAddresses = localStorage.getItem('shippingAddresses');
+          if (savedAddresses) {
+            try {
+              const addresses = JSON.parse(savedAddresses);
+              setSavedAddresses(addresses);
+            } catch (e) {
+              console.error('Error loading saved addresses:', e);
+            }
+          }
+        }}
+        onSelectAddress={handleSelectAddress}
+      />
     </div>
   );
 };

@@ -75,6 +75,28 @@ const brandMap = {
 };
 
 const BrandMarquee = ({ category }) => {
+  const normalize = (str) => (str || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const localBrandLogoMap = {
+    samsung: '/images/brands/samsung.svg',
+    apple: '/images/brands/apple.svg',
+    sony: '/images/brands/sony.svg',
+    oneplus: '/images/brands/oneplus.svg',
+    vivo: '/images/brands/vivo.svg',
+    oppo: '/images/brands/oppo.svg',
+    realme: '/images/brands/realme.svg',
+    xiaomi: '/images/brands/xiaomi.svg',
+    motorola: '/images/brands/motorola.svg',
+    nokia: '/images/brands/nokia.svg',
+    nike: '/images/brands/nike.svg',
+    adidas: '/images/brands/adidas.svg',
+    puma: '/images/brands/puma.svg',
+  };
+
+  const getBrandLogo = (brand) => {
+    const key = normalize(brand?.name);
+    return brand?.logo || localBrandLogoMap[key] || '/images/logo.png';
+  };
+
   let brands = [];
   if (category && brandMap[category]) {
     brands = brandMap[category];
@@ -94,10 +116,17 @@ const BrandMarquee = ({ category }) => {
               className="flex flex-col items-center justify-center mx-8 min-w-[120px]"
             >
               <img
-                src={brand.logo}
+                src={getBrandLogo(brand)}
                 alt={brand.name}
                 className="h-12 w-auto mb-2 object-contain grayscale hover:grayscale-0 transition duration-300"
                 loading="lazy"
+                referrerPolicy="no-referrer"
+                crossOrigin="anonymous"
+                onError={(e) => {
+                  if (!e.target.src.endsWith('/images/logo.png')) {
+                    e.target.src = '/images/logo.png';
+                  }
+                }}
                 style={{ maxWidth: 80 }}
               />
               <span className="font-semibold text-gray-800 text-base md:text-lg text-center">

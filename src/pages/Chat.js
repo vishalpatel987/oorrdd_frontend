@@ -71,6 +71,25 @@ const Chat = () => {
   const [touchStartX, setTouchStartX] = useState(null);
   const [touchEndX, setTouchEndX] = useState(null);
 
+  // Resolve the "other" participant details robustly (handles id-only participants)
+  const resolveOther = (conv) => {
+    try {
+      if (!conv || !user) return { id: null, name: 'User', role: '' };
+      const candidate = conv.participants?.find((p) => {
+        if (typeof p === 'string') return String(p) !== String(user?._id);
+        return String(p?._id) !== String(user?._id);
+      });
+      const otherId = typeof candidate === 'string' ? candidate : candidate?._id;
+      const otherObj = typeof candidate === 'object' ? candidate : null;
+      const fromUsers = users.find((u) => String(u._id) === String(otherId));
+      const name = otherObj?.name || fromUsers?.name || conv.otherName || 'User';
+      const role = otherObj?.role || fromUsers?.role || '';
+      return { id: otherId, name, role };
+    } catch (_) {
+      return { id: null, name: 'User', role: '' };
+    }
+  };
+
   // Fetch users and conversations (with unread counts) from backend
   const fetchConversationsAndUnread = async () => {
     if (!user) return;
@@ -468,19 +487,20 @@ const Chat = () => {
   if (!user) return <div className="flex items-center justify-center h-full text-gray-500 text-lg">Please log in to use chat.</div>;
 
   return (
-    <div className="flex flex-col items-center justify-center w-full h-[calc(100vh-56px)] md:h-[calc(100vh-64px)] bg-gradient-to-br from-blue-100 via-white to-purple-100">
-      <div className="flex flex-1 w-full h-full max-w-4xl md:max-w-5xl bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-200 mt-0 md:mt-6 mb-0 md:mb-6 relative">
+    <div className="flex flex-col w-full h-[calc(100vh-56px)] md:h-[calc(100vh-64px)] bg-gradient-to-br from-blue-100 via-white to-purple-100 md:items-center md:justify-center overflow-x-hidden">
+      <div className="flex flex-1 w-full h-full max-w-4xl md:max-w-5xl bg-white md:rounded-2xl md:shadow-2xl overflow-hidden border border-gray-200 md:mt-6 md:mb-6 relative max-w-full">
         {/* Sidebar as drawer on mobile, as column on desktop */}
         <div
           className={`fixed inset-0 z-30 md:static md:z-auto md:h-full md:w-80 md:relative md:block transition-transform duration-300 ${showSidebar ? 'translate-x-0' : '-translate-x-full'} bg-white/90 md:bg-white flex flex-col md:border-r shadow-lg md:shadow-none p-3 md:p-4`}
           style={{ minWidth: '220px', maxWidth: '90vw' }}
         >
-          <div className="md:hidden flex justify-end mb-2 pt-2 pr-2">
-            <button onClick={() => { setShowSidebar(false); hideClue(); }} className="text-2xl p-2 text-primary-700"><FaArrowLeft /></button>
-          </div>
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-xl font-extrabold text-primary-700 tracking-tight">Chats</h2>
-            <div className="flex items-center gap-2">
+          <div className="md:hidden flex items-center gap-2 mb-2 pt-2">
+            <button onClick={() => { setShowSidebar(false); hideClue(); }} className="text-primary-700 p-1 flex-shrink-0"><FaBars size={18} /></button>
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-200 to-primary-400 flex items-center justify-center text-primary-800 font-bold text-sm flex-shrink-0">
+              {user?.name?.[0]?.toUpperCase()}
+            </div>
+            <h2 className="flex-1 text-lg font-extrabold text-primary-700 tracking-tight ml-2">Chats</h2>
+            <div className="flex items-center gap-1">
               {(user?.role === 'seller' || user?.role === 'admin') && (
                 <button
                   onClick={async () => {
@@ -488,20 +508,20 @@ const Chat = () => {
                     await navigator.clipboard.writeText(link);
                     toast.success('Share link copied! Anyone can use it to start a chat with you.');
                   }}
-                  className="text-primary-700 bg-primary-100 hover:bg-primary-200 rounded p-2 text-base shadow-sm"
+                  className="text-primary-700 bg-primary-100 hover:bg-primary-200 rounded p-1.5 text-sm shadow-sm flex-shrink-0"
                   title="Share conversation link"
                 >
-                  <FaShareAlt />
+                  <FaShareAlt size={14} />
                 </button>
               )}
-              <button onClick={() => { fetchConversationsAndUnread(); hideClue(); }} className="text-xs px-2 py-1 rounded bg-primary-100 hover:bg-primary-200 text-primary-700 font-semibold shadow-sm">Refresh</button>
+              <button onClick={() => { fetchConversationsAndUnread(); hideClue(); }} className="text-xs px-2 py-1 rounded bg-primary-100 hover:bg-primary-200 text-primary-700 font-semibold shadow-sm flex-shrink-0">Refresh</button>
             </div>
           </div>
           <div className="flex-1 overflow-y-auto pr-1">
             <h3 className="font-semibold text-gray-700 mb-2 text-xs uppercase tracking-wider">Conversations</h3>
             {conversations.length === 0 && <div className="text-gray-400">No conversations yet</div>}
             {conversations.map((conv) => {
-              const other = conv.participants?.find((p) => p._id !== user?._id);
+              const other = resolveOther(conv);
               const unread = chatUnreadCounts?.[conv._id] || 0;
               const lastMsg = lastMessages?.[conv._id];
               return (
@@ -516,7 +536,7 @@ const Chat = () => {
                       {other?.name?.[0]?.toUpperCase()}
                     </div>
                     <div className="flex flex-col items-start w-36">
-                      <span className="font-semibold text-gray-900 truncate text-sm">{other?.name || 'Unknown'} <span className="text-xs text-gray-400">({other?.role})</span></span>
+                      <span className="font-semibold text-gray-900 truncate text-sm">{other?.name || 'User'} <span className="text-xs text-gray-400">{other?.role ? `(${other.role})` : ''}</span></span>
                       {lastMsg && (
                         <span className="text-xs text-gray-500 truncate w-full">
                           {lastMsg.sender && lastMsg.sender._id === user._id ? 'You: ' : lastMsg.sender?.name ? `${lastMsg.sender.name}: ` : ''}
@@ -545,31 +565,38 @@ const Chat = () => {
             })}
           </div>
         </div>
-        {/* Hamburger open button (mobile only) */}
-        {!showSidebar && (
+        {/* Mobile floating hamburger - shows only when sidebar is hidden */}
+        {!showSidebar && !selectedConversation && (
           <button
-            className="md:hidden absolute top-4 left-4 z-40 bg-white/80 rounded-full p-2 shadow text-primary-700"
+            aria-label="Open conversations"
+            className="md:hidden fixed top-20 left-4 z-40 bg-white rounded-full p-2 shadow-lg text-primary-700 border border-gray-200"
             onClick={() => { setShowSidebar(true); hideClue(); }}
           >
-            <FaBars size={22} />
+            <FaBars size={20} />
           </button>
         )}
         {/* Chat Window */}
-        <div className={`flex-1 flex flex-col bg-white transition-all duration-300 h-full ${showSidebar && window.innerWidth < 768 ? 'hidden' : ''}`}>
+        <div className={`flex-1 flex flex-col bg-white transition-all duration-300 h-full overflow-hidden ${showSidebar && window.innerWidth < 768 ? 'hidden' : ''}`}>
           {/* Chat Header */}
-          <div className="flex items-center gap-4 px-3 md:px-6 py-3 border-b border-gray-200 bg-white sticky top-0 z-10">
-            {/* Hamburger icon for mobile only */}
-            {selectedConversation && (
-              <button className="md:hidden mr-2 text-primary-700" onClick={() => { handleBack(); hideClue(); }}><FaArrowLeft size={22} /></button>
-            )}
+          <div className="flex items-center gap-2 md:gap-4 px-2 md:px-6 py-3 border-b border-gray-200 bg-white sticky top-0 z-20 overflow-hidden">
+            {/* Hamburger and avatar on same line for mobile */}
+            {selectedConversation && selectedConversation.participants ? (
+              <div className="md:hidden flex items-center gap-2 flex-shrink-0">
+                <button className="text-primary-700 z-50 relative" onClick={() => { setShowSidebar(true); hideClue(); }}><FaBars size={20} /></button>
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-200 to-primary-400 flex items-center justify-center text-primary-800 font-bold text-base flex-shrink-0">
+                  {resolveOther(selectedConversation).name?.[0]?.toUpperCase()}
+                </div>
+              </div>
+            ) : null}
             {selectedConversation && selectedConversation.participants ? (
               <>
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-200 to-primary-400 flex items-center justify-center text-primary-800 font-bold text-xl">
-                  {selectedConversation.participants.find((p) => p._id !== user?._id)?.name?.[0]?.toUpperCase()}
+                {/* Desktop avatar - hidden on mobile */}
+                <div className="hidden md:flex w-10 h-10 rounded-full bg-gradient-to-br from-primary-200 to-primary-400 items-center justify-center text-primary-800 font-bold text-xl flex-shrink-0">
+                  {resolveOther(selectedConversation).name?.[0]?.toUpperCase()}
                 </div>
-                <div className="flex flex-col">
-                  <span className="font-semibold text-lg text-gray-900">{selectedConversation.participants.find((p) => p._id !== user?._id)?.name}</span>
-                  <span className="text-xs text-gray-500">{selectedConversation.participants.find((p) => p._id !== user?._id)?.role}</span>
+                <div className="flex flex-col min-w-0 flex-1">
+                  <span className="font-semibold text-sm md:text-lg text-gray-900 truncate">{resolveOther(selectedConversation).name}</span>
+                  <span className="text-xs text-gray-500 truncate">{resolveOther(selectedConversation).role}</span>
                 </div>
                 {/* Translation Feature: desktop only */}
                 <div className="hidden md:flex items-center gap-2 ml-auto">
@@ -615,12 +642,12 @@ const Chat = () => {
                 </div>
                 {/* Translate icon for mobile */}
                 <button
-                  className="md:hidden ml-auto text-primary-700 p-2 rounded-full hover:bg-primary-100 active:bg-primary-200 transition shadow-sm"
+                  className="md:hidden ml-auto text-primary-700 p-1.5 rounded-full hover:bg-primary-100 active:bg-primary-200 transition shadow-sm flex-shrink-0"
                   style={{ boxShadow: '0 1px 4px rgba(80,80,180,0.08)' }}
                   onClick={() => setShowTranslateDrawer(true)}
                   title="Translation options"
                 >
-                  <FaGlobe size={20} />
+                  <FaGlobe size={18} />
                 </button>
               </>
             ) : null}
@@ -636,14 +663,7 @@ const Chat = () => {
                 onTouchMove={handleDrawerTouchMove}
                 onTouchEnd={handleDrawerTouchEnd}
               >
-                <button
-                  className="absolute top-3 left-3 text-primary-700 text-lg rounded-full hover:bg-primary-100 active:bg-primary-200 p-2"
-                  onClick={() => setShowTranslateDrawer(false)}
-                  title="Back"
-                >
-                  <FaArrowLeft />
-                </button>
-                <div className="p-4 pt-12 flex flex-col gap-3 text-[15px]">
+                <div className="p-4 pt-4 flex flex-col gap-3 text-[15px]">
                   <label className="flex items-center gap-2 font-medium">
                     <input
                       type="checkbox"
@@ -687,26 +707,25 @@ const Chat = () => {
             </div>
           )}
           {/* Chat Body */}
-          <div ref={chatBodyRef} className="flex-1 flex flex-col-reverse overflow-y-auto gap-2 px-2 md:px-4 py-2 md:py-4 pb-20 md:pb-8" style={{scrollbarWidth:'thin', minHeight:0, maxHeight:'100%'}} onClick={hideClue}>
-            <div ref={messagesEndRef} />
+          <div ref={chatBodyRef} className="flex-1 flex flex-col overflow-y-auto overflow-x-hidden gap-3 md:gap-4 px-2 md:px-4 py-2 md:py-4 pb-20 md:pb-8" style={{scrollbarWidth:'thin', minHeight:0, maxHeight:'100%'}} onClick={hideClue}>
             {selectedConversation && selectedConversation.participants ? (
-              messages.slice().reverse().map((msg, idx) => {
+              messages.map((msg, idx) => {
                 if (!msg.sender || !user) return null;
                 const isMe = msg.sender?._id === user?._id;
-                const other = selectedConversation.participants.find((p) => p._id !== user?._id);
-                const msgId = msg._id || (messages.length - 1 - idx); // reverse order
+                const other = resolveOther(selectedConversation);
+                const msgId = msg._id || idx;
                 const shouldTranslate = autoTranslateIncoming && !isMe && msg.text;
                 const loadingTranslation = loadingTranslations[msgId];
                 const translated = translatedMessages[msgId];
                 return (
-                  <div key={idx} className={`flex items-end w-full ${isMe ? 'justify-end pr-2' : 'justify-start pl-2'} mb-1`}>
+                  <div key={idx} className={`flex items-start w-full ${isMe ? 'justify-end pr-2 md:pr-3' : 'justify-start pl-2 md:pl-3'} mb-3 md:mb-4 overflow-hidden`}>
                     {!isMe && (
                       <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-200 to-primary-400 flex items-center justify-center text-primary-800 font-bold text-base mr-2">
                         {other?.name?.[0]?.toUpperCase()}
                       </div>
                     )}
                     <div
-                      className={`relative max-w-xs w-fit px-4 py-2 pb-5 rounded-2xl shadow-md text-sm ${isMe ? 'bg-primary-600 text-white rounded-br-3xl ml-auto' : 'bg-white text-gray-900 border border-gray-200 rounded-bl-3xl'} flex flex-col`}
+                      className={`relative max-w-[85%] md:max-w-xs w-fit px-4 py-2 pb-5 rounded-2xl shadow-md text-sm ${isMe ? 'bg-primary-600 text-white rounded-br-3xl ml-auto' : 'bg-white text-gray-900 border border-gray-200 rounded-bl-3xl'} flex flex-col`}
                       style={{wordBreak:'break-word'}}
                       onDoubleClick={() => isMe && setDeleteMsgId(msg._id)}
                       title={isMe ? 'Double-click to delete/unsend' : undefined}
@@ -770,6 +789,7 @@ const Chat = () => {
             ) : (
               <div className="h-full flex items-center justify-center text-gray-400 text-lg font-medium">Select a conversation or start a new chat</div>
             )}
+            <div ref={messagesEndRef} />
           </div>
           {/* Typing Indicator */}
           {isOtherTyping && (
@@ -777,7 +797,7 @@ const Chat = () => {
           )}
           {/* Chat Input */}
           {selectedConversation && (
-            <form onSubmit={sendMessage} className="flex items-center gap-2 md:gap-3 px-2 md:px-6 py-3 md:py-4 border-t border-gray-200 bg-white sticky bottom-0 z-10 mt-0 md:mt-2" onClick={hideClue}>
+            <form onSubmit={sendMessage} className="flex items-center gap-2 md:gap-3 px-2 md:px-6 py-3 md:py-4 border-t border-gray-200 bg-white sticky bottom-0 z-20 mt-0 md:mt-2 overflow-hidden" onClick={hideClue}>
               {/* Clue for double-click delete */}
               {showDeleteClue && (
                 <span className="absolute left-1/2 -translate-x-1/2 bottom-16 bg-primary-50 text-primary-700 text-xs px-3 py-1 rounded-full shadow-sm animate-fade-in-out z-20 select-none pointer-events-none">
@@ -797,15 +817,15 @@ const Chat = () => {
               </label>
               <input
                 type="text"
-                className="flex-1 border-none bg-white/80 rounded-2xl px-5 py-3 shadow focus:outline-none focus:ring-2 focus:ring-primary-200 text-gray-900 placeholder-gray-400"
+                className="flex-1 min-w-0 border-none bg-white/80 rounded-2xl px-3 md:px-5 py-3 shadow focus:outline-none focus:ring-2 focus:ring-primary-200 text-gray-900 placeholder-gray-400 text-sm md:text-base"
                 placeholder="Type a message..."
                 value={message}
                 onChange={handleInputChange}
                 required={!file}
                 autoFocus
               />
-              <button type="submit" className="w-12 h-12 rounded-full bg-primary-600 hover:bg-primary-700 transition flex items-center justify-center shadow-lg text-white text-xl">
-                <FaPaperPlane />
+              <button type="submit" className="flex-shrink-0 px-3 md:px-4 h-10 md:h-12 rounded-full bg-primary-600 hover:bg-primary-700 transition flex items-center justify-center shadow-lg text-white text-xs md:text-sm font-medium">
+                Send
               </button>
             </form>
           )}

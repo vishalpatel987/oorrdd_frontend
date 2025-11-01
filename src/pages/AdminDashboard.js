@@ -94,6 +94,10 @@ const AdminDashboard = () => {
   const [withdrawTrendPeriod, setWithdrawTrendPeriod] = useState('daily');
   const [topVendorsPeriod, setTopVendorsPeriod] = useState('daily');
 
+  const [returnsList, setReturnsList] = useState([]);
+  const [returnsLoading, setReturnsLoading] = useState(false);
+  const [returnDetailsModal, setReturnDetailsModal] = useState({ open: false, req: null });
+
   // Event Banner state
   const [eventBanners, setEventBanners] = useState([]);
   const [eventForm, setEventForm] = useState({
@@ -104,6 +108,24 @@ const AdminDashboard = () => {
   });
   const [eventLoading, setEventLoading] = useState(false);
   const [eventError, setEventError] = useState('');
+
+
+  // Fetch returns when tab active
+  useEffect(() => {
+    const fetchReturns = async () => {
+      if (activeTab !== 'returns') return;
+      setReturnsLoading(true);
+      try {
+        const res = await axiosInstance.get('/returns/admin?status=all');
+        setReturnsList(res.data || []);
+      } catch (e) {
+        setReturnsList([]);
+      } finally {
+        setReturnsLoading(false);
+      }
+    };
+    fetchReturns();
+  }, [activeTab]);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -1014,6 +1036,16 @@ const AdminDashboard = () => {
             >
               Wallet
             </button>
+            <button
+              onClick={() => setActiveTab('returns')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'returns'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Returns
+            </button>
           </nav>
         </div>
 
@@ -1110,7 +1142,7 @@ const AdminDashboard = () => {
                     <option value="monthly">Monthly</option>
                     <option value="yearly">Yearly</option>
                   </select>
-                </div>
+            </div>
                 <div style={{ width: '100%', height: 280 }}>
                   <ResponsiveContainer>
                     <LineChart data={salesReport} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
@@ -1168,6 +1200,115 @@ const AdminDashboard = () => {
           )}
 
           {/* Vendors Tab */}
+          {activeTab === 'returns' && (
+            <div>
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">Return & Replacement Requests</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left py-3 px-4 font-medium text-gray-700">Request</th>
+                      <th className="text-left py-3 px-4 font-medium text-gray-700">User</th>
+                      <th className="text-left py-3 px-4 font-medium text-gray-700">Order</th>
+                      <th className="text-left py-3 px-4 font-medium text-gray-700">Type</th>
+                      <th className="text-left py-3 px-4 font-medium text-gray-700">Reason</th>
+                      <th className="text-left py-3 px-4 font-medium text-gray-700">Status</th>
+                      <th className="text-left py-3 px-4 font-medium text-gray-700">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {returnsLoading ? (
+                      <tr><td colSpan="7" className="text-center py-6">Loading...</td></tr>
+                    ) : returnsList.length === 0 ? (
+                      <tr><td colSpan="7" className="text-center py-6 text-gray-500">No return/replacement requests</td></tr>
+                    ) : (
+                      returnsList.map(r => (
+                        <tr key={r._id} className="border-b border-gray-100 hover:bg-gray-50">
+                          <td className="py-3 px-4 font-mono">{r._id.slice(-6)}</td>
+                          <td className="py-3 px-4">{r.user?.name || '-'}</td>
+                          <td className="py-3 px-4">#{r.order?.orderNumber || r.order?._id?.slice(-6) || '-'}</td>
+                          <td className="py-3 px-4 capitalize">{r.type}</td>
+                          <td className="py-3 px-4">{r.reasonCategory}</td>
+                          <td className="py-3 px-4">{r.status}</td>
+                          <td className="py-3 px-4">
+                            <div className="flex gap-2">
+                              <button
+                                className="px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded hover:bg-gray-200"
+                                onClick={() => setReturnDetailsModal({ open: true, req: r })}
+                              >View</button>
+                              {r.status === 'requested' && (
+                                <>
+                                  <button
+                                    className="px-2 py-1 text-xs bg-green-600 text-white rounded"
+                                    onClick={async () => {
+                                      try { await axiosInstance.put(`/returns/admin/${r._id}/approve`); setReturnsList(prev => prev.map(x => x._id === r._id ? { ...x, status: 'approved' } : x)); } catch (e) { alert(e.response?.data?.message || 'Approve failed'); }
+                                    }}
+                                  >Approve</button>
+                                  <button
+                                    className="px-2 py-1 text-xs bg-red-600 text-white rounded"
+                                    onClick={async () => {
+                                      try { await axiosInstance.put(`/returns/admin/${r._id}/reject`); setReturnsList(prev => prev.map(x => x._id === r._id ? { ...x, status: 'rejected' } : x)); } catch (e) { alert(e.response?.data?.message || 'Reject failed'); }
+                                    }}
+                                  >Reject</button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              {returnDetailsModal && returnDetailsModal.open && returnDetailsModal.req && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+                  <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-2xl mx-2 relative overflow-y-auto max-h-[90vh]">
+                    <button className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 text-2xl" onClick={() => setReturnDetailsModal({ open: false, req: null })}>&times;</button>
+                    <h3 className="text-lg font-semibold mb-3">Return/Replacement Details</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                      <div><span className="text-gray-500">Request:</span> <span className="font-mono">{returnDetailsModal.req._id}</span></div>
+                      <div><span className="text-gray-500">Status:</span> <span className="capitalize">{returnDetailsModal.req.status}</span></div>
+                      <div><span className="text-gray-500">Order:</span> #{returnDetailsModal.req.order?.orderNumber || returnDetailsModal.req.order?._id}</div>
+                      <div><span className="text-gray-500">Type:</span> <span className="capitalize">{returnDetailsModal.req.type}</span></div>
+                      <div className="md:col-span-2"><span className="text-gray-500">Reason:</span> {returnDetailsModal.req.reasonCategory}{returnDetailsModal.req.reasonText ? ` - ${returnDetailsModal.req.reasonText}` : ''}</div>
+                    </div>
+                    <div className="mt-4">
+                      <h4 className="font-semibold mb-2">Refund Method</h4>
+                      <div className="text-sm bg-gray-50 rounded p-3">
+                        <div><b>Mode:</b> {returnDetailsModal.req.refundDetails?.mode || '-'}</div>
+                        {returnDetailsModal.req.refundDetails?.mode === 'upi' && (
+                          <div><b>UPI ID:</b> {returnDetailsModal.req.refundDetails?.upiId || '-'}</div>
+                        )}
+                        {returnDetailsModal.req.refundDetails?.mode === 'bank' && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            <div><b>Account Holder:</b> {returnDetailsModal.req.refundDetails?.bank?.accountHolderName || '-'}</div>
+                            <div><b>Bank Name:</b> {returnDetailsModal.req.refundDetails?.bank?.bankName || '-'}</div>
+                            <div><b>Account Number:</b> {returnDetailsModal.req.refundDetails?.bank?.accountNumber || '-'}</div>
+                            <div><b>IFSC:</b> {returnDetailsModal.req.refundDetails?.bank?.ifscCode || '-'}</div>
+                          </div>
+                        )}
+                        {returnDetailsModal.req.refundDetails?.mode === 'wallet' && (
+                          <div><b>Wallet ID:</b> {returnDetailsModal.req.refundDetails?.walletId || '-'}</div>
+                        )}
+                      </div>
+                    </div>
+                    {(returnDetailsModal.req.reverseAwb || returnDetailsModal.req.reverseTrackingUrl) && (
+                      <div className="mt-4">
+                        <h4 className="font-semibold mb-2">Reverse Pickup</h4>
+                        <div className="text-sm bg-gray-50 rounded p-3">
+                          <div><b>AWB:</b> {returnDetailsModal.req.reverseAwb || '-'}</div>
+                          <div><b>Track:</b> {returnDetailsModal.req.reverseTrackingUrl ? (<a href={returnDetailsModal.req.reverseTrackingUrl} target="_blank" rel="noreferrer" className="text-blue-600 underline">{returnDetailsModal.req.reverseTrackingUrl}</a>) : '-'}</div>
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex justify-end mt-4">
+                      <button className="px-4 py-2 bg-gray-200 rounded" onClick={() => setReturnDetailsModal({ open: false, req: null })}>Close</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           {activeTab === 'vendors' && (
             <div>
               <div className="flex justify-between items-center mb-6">
@@ -1849,6 +1990,44 @@ const AdminDashboard = () => {
                       </table>
                     </div>
                     <div className="text-right font-bold text-lg">Total: {formatINR(selectedOrder.totalPrice)}</div>
+
+                    {/* Shipping & Tracking (RapidShyp) for admin view */}
+                    {selectedOrder.shipment && (
+                      <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                        <h3 className="text-sm font-semibold text-gray-800 mb-2">Shipping & Tracking</h3>
+                        <div className="space-y-2 text-sm">
+                          {selectedOrder.shipment?.courier && (
+                            <div><span className="text-gray-600">Courier:</span><span className="ml-2 font-medium">{selectedOrder.shipment.courier}</span></div>
+                          )}
+                          {selectedOrder.shipment?.awb && (
+                            <div><span className="text-gray-600">AWB:</span><span className="ml-2 font-mono text-blue-600">{selectedOrder.shipment.awb}</span></div>
+                          )}
+                          {selectedOrder.shipment?.trackingUrl && (
+                            <div><span className="text-gray-600">Tracking:</span><a href={selectedOrder.shipment.trackingUrl} target="_blank" rel="noreferrer" className="ml-2 text-blue-600 underline">Open Tracking →</a></div>
+                          )}
+                          {selectedOrder.shipment?.status && (
+                            <div>
+                              <span className="text-gray-600">Status:</span>
+                              <span className={`ml-2 px-2 py-1 rounded text-xs font-medium inline-block ${
+                                selectedOrder.shipment.status === 'DEL' || selectedOrder.shipment.status === 'delivered' ? 'bg-green-100 text-green-700' :
+                                selectedOrder.shipment.status === 'RTO' || selectedOrder.shipment.isReturning ? 'bg-orange-100 text-orange-700' :
+                                selectedOrder.shipment.status === 'CAN' || selectedOrder.shipment.status === 'cancelled' ? 'bg-red-100 text-red-700' :
+                                'bg-blue-100 text-blue-700'
+                              }`}>{selectedOrder.shipment.statusDescription || selectedOrder.shipment.status}</span>
+                            </div>
+                          )}
+                          {selectedOrder.estimatedDelivery && (
+                            <div><span className="text-gray-600">Estimated Delivery:</span><span className="ml-2 font-medium">{new Date(selectedOrder.estimatedDelivery).toLocaleDateString()}</span></div>
+                          )}
+                          {selectedOrder.deliveredAt && (
+                            <div><span className="text-gray-600">Delivered On:</span><span className="ml-2 font-medium text-green-600">{new Date(selectedOrder.deliveredAt).toLocaleDateString()}</span></div>
+                          )}
+                          {selectedOrder.shipment?.isReturning && (
+                            <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded text-xs text-orange-700">⚠️ Return to Origin</div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                 </div>
               )}
               </div>
@@ -2123,32 +2302,32 @@ const AdminDashboard = () => {
                     <div className="bg-white rounded-lg shadow-md p-6">
                       <div className="flex items-center justify-between mb-2">
                         <h3 className="text-lg font-semibold text-gray-800">Withdrawal Trends</h3>
-                        <select
+                  <select
                           value={withdrawTrendPeriod}
                           onChange={(e) => setWithdrawTrendPeriod(e.target.value)}
-                          className="border border-gray-300 text-sm rounded px-2 py-1"
-                        >
-                          <option value="daily">Daily</option>
-                          <option value="monthly">Monthly</option>
-                          <option value="yearly">Yearly</option>
-                        </select>
-                      </div>
+                    className="border border-gray-300 text-sm rounded px-2 py-1"
+                  >
+                    <option value="daily">Daily</option>
+                    <option value="monthly">Monthly</option>
+                    <option value="yearly">Yearly</option>
+                  </select>
+                </div>
                       <div style={{ width: '100%', height: 260 }}>
-                        <ResponsiveContainer>
+                  <ResponsiveContainer>
                           <LineChart data={withdrawalTrend} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                            <YAxis tick={{ fontSize: 12 }} />
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 12 }} />
                             <Tooltip formatter={(v) => formatINR(v)} labelFormatter={(l) => `Date: ${l}`} />
                             <Line type="monotone" dataKey="amount" stroke="#3b82f6" strokeWidth={2} dot={false} />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </div>
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
                       {withdrawalTrend.length === 0 && (
                         <p className="text-center text-sm text-gray-500 mt-2">No withdrawal data yet.</p>
-                      )}
-                    </div>
-                    
+                )}
+              </div>
+
                     {/* Top Vendors Chart */}
                     <div className="bg-white rounded-lg shadow-md p-6">
                       <div className="flex items-center justify-between mb-2">
@@ -2163,26 +2342,26 @@ const AdminDashboard = () => {
                           <option value="yearly">Yearly</option>
                         </select>
                       </div>
-                      <div style={{ width: '100%', height: 260 }}>
-                        <ResponsiveContainer>
+                  <div style={{ width: '100%', height: 260 }}>
+                    <ResponsiveContainer>
                           <BarChart data={sellerEarnings
                             .slice()
                             .sort((a,b) => (b.totalEarnings||0) - (a.totalEarnings||0))
                             .slice(0,5)
                             .map(v => ({ name: v.shopName || 'Vendor', revenue: v.totalEarnings || 0 }))} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-20} height={50} />
-                            <YAxis tick={{ fontSize: 12 }} />
-                            <Tooltip formatter={(v) => formatINR(v)} />
-                            <Bar dataKey="revenue" fill="#10b981" />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-20} height={50} />
+                        <YAxis tick={{ fontSize: 12 }} />
+                        <Tooltip formatter={(v) => formatINR(v)} />
+                        <Bar dataKey="revenue" fill="#10b981" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
                       {(!sellerEarnings || sellerEarnings.length === 0) && (
                         <p className="text-center text-sm text-gray-500 mt-2">No vendor earnings data yet.</p>
-                      )}
-                    </div>
-                  </div>
+                  )}
+                </div>
+              </div>
 
               {/* Charts moved to Main Overview */}
 
@@ -2253,13 +2432,13 @@ const AdminDashboard = () => {
                       <div className="flex-1">
                         <div className="relative">
                           <FaEye className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                          <input
-                            type="text"
+                        <input
+                          type="text"
                             placeholder="Search by vendor name, email, or withdrawal ID..."
                             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            value={withdrawalSearch}
-                            onChange={(e) => setWithdrawalSearch(e.target.value)}
-                          />
+                          value={withdrawalSearch}
+                          onChange={(e) => setWithdrawalSearch(e.target.value)}
+                        />
                         </div>
                       </div>
                       <div className="md:w-48">
@@ -2289,16 +2468,16 @@ const AdminDashboard = () => {
                       >
                         Refresh
                       </button>
-                    </div>
+                                </div>
                     <div className="p-6">
                       {withdrawalRequests.length === 0 ? (
-                        <div className="text-center py-12">
-                          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <FaWallet className="text-gray-400 text-2xl" />
-                          </div>
-                          <p className="text-gray-500 text-lg">No withdrawal requests found</p>
-                          <p className="text-gray-400 text-sm">Withdrawal requests will appear here when sellers make requests</p>
-                        </div>
+                      <div className="text-center py-12">
+                        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <FaWallet className="text-gray-400 text-2xl" />
+                              </div>
+                        <p className="text-gray-500 text-lg">No withdrawal requests found</p>
+                        <p className="text-gray-400 text-sm">Withdrawal requests will appear here when sellers make requests</p>
+                            </div>
                       ) : (
                         <div className="space-y-4">
                           {withdrawalRequests.map((w) => (
@@ -2307,9 +2486,9 @@ const AdminDashboard = () => {
                                 <div>
                                   <div className="font-semibold text-gray-800 text-base">
                                     {w.seller?.name || 'Unknown Seller'}
-                                  </div>
+                    </div>
                                   <div className="text-gray-600 text-sm">{w.seller?.email || '-'}</div>
-                                </div>
+                  </div>
                                 <div className="flex items-center gap-4">
                                   <div className="text-gray-800 font-semibold">{formatINR(w.amount || 0)}</div>
                                   <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(w.status)}`}>
@@ -2579,7 +2758,7 @@ const AdminDashboard = () => {
                           const q = vendorSearch.toLowerCase();
                           return (s.shopName || '').toLowerCase().includes(q) || (s.email || '').toLowerCase().includes(q);
                         }).length})</h4>
-                    </div>
+                              </div>
                     <div className="p-6">
                       {sellerEarnings
                         .filter(v => (v.totalEarnings||0) > 0 || (v.withdrawnAmount||0) > 0 || (v.currentBalance||0) > 0)
@@ -2591,10 +2770,10 @@ const AdminDashboard = () => {
                         <div className="text-center py-12">
                           <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                             <FaStore className="text-gray-400 text-2xl" />
-                          </div>
+                              </div>
                           <p className="text-gray-500 text-lg">No vendors found</p>
                           <p className="text-gray-400 text-sm">Vendor earnings will appear here when vendors start selling</p>
-                        </div>
+                            </div>
                       ) : (
                         <div className="space-y-4">
                           {sellerEarnings
@@ -2611,45 +2790,45 @@ const AdminDashboard = () => {
                                 <div className="flex items-center">
                                   <div className="p-3 rounded-full bg-blue-100 text-blue-600 mr-4">
                                     <FaStore className="text-xl" />
-                                  </div>
+                            </div>
                                   <div>
                                     <h5 className="font-semibold text-gray-800 text-lg">{seller.shopName}</h5>
                                     <p className="text-gray-600">{seller.email}</p>
-                                  </div>
-                                </div>
+                            </div>
+                          </div>
                                 <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(seller.isApproved ? 'approved' : 'pending')}`}>
                                   {seller.isApproved ? 'Active' : 'Pending'}
                                 </span>
-                              </div>
+                          </div>
                               
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
                                 <div className="flex items-center">
                                   <div className="p-2 rounded-full bg-green-100 text-green-600 mr-3">
                                     <FaDollarSign className="text-lg" />
-                                  </div>
+                        </div>
                                   <div>
                                     <p className="text-sm text-gray-600">Total Earnings</p>
                                     <p className="font-semibold text-gray-800">{formatINR(seller.totalEarnings)}</p>
-                                  </div>
-                                </div>
+                      </div>
+                    </div>
                                 <div className="flex items-center">
                                   <div className="p-2 rounded-full bg-yellow-100 text-yellow-600 mr-3">
                                     <FaChartLine className="text-lg" />
-                                  </div>
+                        </div>
                                   <div>
                                     <p className="text-sm text-gray-600">Withdrawals</p>
                                     <p className="font-semibold text-gray-800">{formatINR(seller.withdrawnAmount)}</p>
+                        </div>
                                   </div>
-                                </div>
                                 <div className="flex items-center">
                                   <div className="p-2 rounded-full bg-purple-100 text-purple-600 mr-3">
                                     <FaWallet className="text-lg" />
-                                  </div>
-                                  <div>
+                                    </div>
+                                    <div>
                                     <p className="text-sm text-gray-600">Current Balance</p>
                                     <p className="font-semibold text-gray-800">{formatINR(seller.currentBalance)}</p>
+                                    </div>
                                   </div>
-                                </div>
                               </div>
                             </div>
                           ))}

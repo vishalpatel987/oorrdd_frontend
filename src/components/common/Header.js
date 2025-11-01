@@ -433,9 +433,6 @@ const Header = () => {
         >
           <div className="flex justify-between items-center px-4 py-4 border-b">
             <span className="text-xl font-bold text-primary-600">Menu</span>
-            <button onClick={() => setIsMenuOpen(false)} aria-label="Close menu" className="text-gray-600 hover:text-primary-600 text-2xl transition-colors duration-200">
-              <FaTimes />
-            </button>
           </div>
           <nav className="flex flex-col space-y-2 px-6 py-6 text-base font-medium">
             <Link to="/" className="nav-link px-2 py-2 rounded hover:bg-primary-50 hover:text-primary-600 transition-colors duration-200" onClick={() => setIsMenuOpen(false)}>Home</Link>

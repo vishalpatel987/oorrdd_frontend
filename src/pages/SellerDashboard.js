@@ -6,8 +6,10 @@ import axiosInstance from '../api/axiosConfig';
 import productAPI from '../api/productAPI';
 import { useSelector, useDispatch } from 'react-redux';
 import { fetchOrders } from '../redux/slices/orderSlice';
+import shippingAPI from '../api/shippingAPI';
 import VariantManager from '../components/common/VariantManager';
 import walletAPI from '../api/walletAPI';
+import axios from 'axios';
 
 const ORDER_STATUSES = [
   'pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded'
@@ -126,10 +128,8 @@ const SellerDashboard = () => {
     totalWithdrawn: 0,
     pendingWithdrawals: 0
   });
-  const [transactions, setTransactions] = useState([]);
   const [withdrawals, setWithdrawals] = useState([]);
   const [walletLoading, setWalletLoading] = useState(false);
-  const [activeWalletTab, setActiveWalletTab] = useState('transactions');
   const [withdrawalModal, setWithdrawalModal] = useState(false);
   const [withdrawalForm, setWithdrawalForm] = useState({
     amount: '',
@@ -150,6 +150,12 @@ const SellerDashboard = () => {
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [statusError, setStatusError] = useState('');
   const [newStatus, setNewStatus] = useState('');
+  // Shipping actions state
+  const [shipLoading, setShipLoading] = useState(false);
+  const [shipMessage, setShipMessage] = useState('');
+  const [reverseLoading, setReverseLoading] = useState(false);
+  const [returnsForSeller, setReturnsForSeller] = useState([]);
+  const [returnDetailsModal, setReturnDetailsModal] = useState({ open: false, req: null });
 
   // Seller stats state
   const [stats, setStats] = useState({ totalSales: 0, totalOrders: 0, totalProducts: 0, totalCustomers: 0 });
@@ -214,6 +220,20 @@ const SellerDashboard = () => {
     dispatch(fetchOrders({ seller: true }));
   }, [dispatch]);
 
+  // Fetch returns for this seller when Orders tab active
+  useEffect(() => {
+    const loadReturns = async () => {
+      if (activeTab !== 'orders') return;
+      try {
+        const res = await axiosInstance.get('/returns/seller');
+        setReturnsForSeller(res.data || []);
+      } catch (e) {
+        setReturnsForSeller([]);
+      }
+    };
+    loadReturns();
+  }, [activeTab]);
+
   // Fetch seller stats on mount
   useEffect(() => {
     setStatsLoading(true);
@@ -244,15 +264,13 @@ const SellerDashboard = () => {
         pendingWithdrawals: data.pendingWithdrawals || 0
       });
 
-      // Fetch transactions (placeholder for when we implement it)
-      setTransactions([]);
 
       // Fetch real withdrawals for this seller
       const wr = await walletAPI.getMyWithdrawalRequests({ limit: 50 });
       const wrList = (wr.data?.data || wr.data || []).map(w => ({
         id: w._id,
         date: w.requestDate || w.createdAt,
-        type: 'withdrawal',
+          type: 'withdrawal',
         amount: w.amount,
         status: w.status,
         paymentMethod: w.paymentMethod,
@@ -420,6 +438,72 @@ const SellerDashboard = () => {
     } catch (err) {
       setStatusError(err.response?.data?.message || 'Failed to update status');
       setStatusUpdating(false);
+    }
+  };
+
+  // Shipping: create shipment via RapidShyp
+  const handleCreateShipment = async () => {
+    if (!selectedOrder) return;
+    setShipLoading(true);
+    setShipMessage('');
+    try {
+      const res = await shippingAPI.createShipment(selectedOrder._id);
+      const shipment = res.data?.data?.shipment || res.data?.shipment || {};
+      setSelectedOrder(prev => ({ ...(prev || {}), shipment }));
+      // refresh orders to reflect status changes
+      dispatch(fetchOrders({ seller: true }));
+      setShipMessage('Shipment created successfully');
+    } catch (e) {
+      setShipMessage(e.response?.data?.message || 'Failed to create shipment');
+    } finally {
+      setShipLoading(false);
+    }
+  };
+
+  const handleGetLabel = async () => {
+    if (!selectedOrder) return;
+    setShipLoading(true);
+    setShipMessage('');
+    try {
+      const res = await shippingAPI.getLabel(selectedOrder._id);
+      const url = res.data?.data?.labelUrl || res.data?.labelUrl;
+      if (url) window.open(url, '_blank');
+      setShipMessage(url ? 'Label opened.' : 'Label not available yet');
+    } catch (e) {
+      setShipMessage(e.response?.data?.message || 'Failed to get label');
+    } finally {
+      setShipLoading(false);
+    }
+  };
+
+  const handleCancelShipment = async () => {
+    if (!selectedOrder) return;
+    if (!window.confirm('Cancel this shipment?')) return;
+    setShipLoading(true);
+    setShipMessage('');
+    try {
+      await shippingAPI.cancelShipment(selectedOrder._id, 'Vendor cancelled');
+      // Refresh orders
+      dispatch(fetchOrders({ seller: true }));
+      setShipMessage('Shipment cancelled');
+      setShowOrderModal(false);
+    } catch (e) {
+      setShipMessage(e.response?.data?.message || 'Failed to cancel shipment');
+    } finally {
+      setShipLoading(false);
+    }
+  };
+
+  const handleReversePickup = async (order) => {
+    setReverseLoading(true);
+    setShipMessage('');
+    try {
+      await (await import('../api/returnsAPI')).default.manualReversePickup(order._id);
+      setShipMessage('Reverse pickup requested');
+    } catch (e) {
+      setShipMessage(e.response?.data?.message || 'Failed to create reverse pickup');
+    } finally {
+      setReverseLoading(false);
     }
   };
 
@@ -644,7 +728,7 @@ const SellerDashboard = () => {
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-gray-600">No recent activity to display</p>
+                  <p className="text-gray-600">No recent activity to display</p>
                   )}
                 </div>
               </div>
@@ -659,20 +743,20 @@ const SellerDashboard = () => {
                       .slice(0, 3)
                       .map((product) => (
                         <div key={product._id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
-                          <div className="flex items-center">
-                            <img
+                        <div className="flex items-center">
+                          <img
                               src={(product.images && product.images[0] && product.images[0].url) ? product.images[0].url : '/product-images/default.webp'}
-                              alt={product.name}
-                              className="w-10 h-10 object-cover rounded mr-3"
-                            />
-                            <div>
-                              <p className="font-medium text-gray-800">{product.name}</p>
+                            alt={product.name}
+                            className="w-10 h-10 object-cover rounded mr-3"
+                          />
+                          <div>
+                            <p className="font-medium text-gray-800">{product.name}</p>
                               <p className="text-sm text-gray-600">{product.soldCount || product.totalSold || 0} sold</p>
-                            </div>
                           </div>
-                          <span className="font-bold text-blue-600">{formatINR(product.price || 0)}</span>
                         </div>
-                      ))}
+                          <span className="font-bold text-blue-600">{formatINR(product.price || 0)}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
@@ -961,9 +1045,65 @@ const SellerDashboard = () => {
                           </div>
                         </td>
                         <td className="py-3 px-4">
-                          <div className="flex space-x-2">
-                            <button className="text-blue-600 hover:text-blue-800" onClick={() => handleViewOrder(order)}><FaEye /></button>
-                            <button className="text-green-600 hover:text-green-800"><FaEdit /></button>
+                          <div className="flex items-center gap-2">
+                            {/* View details */}
+                            <button className="text-blue-600 hover:text-blue-800" onClick={() => handleViewOrder(order)} title="View">
+                              <FaEye />
+                            </button>
+                            {/* Ship / Tracking / Label in Actions */}
+                            {!order.shipment?.shipmentId ? (
+                              <button
+                                className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
+                                onClick={async () => {
+                                  setSelectedOrder(order);
+                                  await handleCreateShipment();
+                                }}
+                                title="Create Shipment"
+                              >
+                                Ship
+                              </button>
+                            ) : (
+                              <>
+                            <button
+                                  className="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700"
+                                  onClick={() => {
+                                    const url = order.shipment?.trackingUrl || order.trackingUrl;
+                                    if (url) window.open(url, '_blank');
+                                  }}
+                                  title="Track"
+                                >
+                                  Track
+                                </button>
+                                <button
+                                  className="px-2 py-1 bg-indigo-600 text-white rounded text-xs hover:bg-indigo-700"
+                                  onClick={async () => {
+                                    setSelectedOrder(order);
+                                    await handleGetLabel();
+                                  }}
+                                  title="Get Label"
+                                >
+                                  Label
+                                </button>
+                            <button
+                              className="px-2 py-1 bg-yellow-600 text-white rounded text-xs hover:bg-yellow-700 disabled:opacity-50"
+                              onClick={() => handleReversePickup(order)}
+                              disabled={reverseLoading}
+                              title="Reverse Pickup"
+                            >
+                              Reverse
+                            </button>
+                            {order.orderStatus !== 'delivered' && order.shipment?.status !== 'cancelled' && (
+                              <button
+                                className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 disabled:opacity-50"
+                                onClick={async () => { setSelectedOrder(order); await handleCancelShipment(); }}
+                                disabled={shipLoading}
+                                title="Cancel Shipment"
+                              >
+                                Cancel
+                              </button>
+                            )}
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1040,6 +1180,157 @@ const SellerDashboard = () => {
                       </table>
                     </div>
                     <div className="text-right font-bold text-lg">Total: {formatINR(selectedOrder.total || selectedOrder.totalPrice)}</div>
+
+                    {/* Shipping & Tracking (RapidShyp) */}
+                    {selectedOrder.shipment && (
+                      <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                        <h3 className="text-sm font-semibold text-gray-800 mb-2">Shipping & Tracking</h3>
+                        <div className="space-y-2 text-sm">
+                          {selectedOrder.shipment?.courier && (
+                            <div>
+                              <span className="text-gray-600">Courier Partner:</span>
+                              <span className="ml-2 font-medium">{selectedOrder.shipment.courier}</span>
+                            </div>
+                          )}
+                          {selectedOrder.shipment?.awb && (
+                            <div>
+                              <span className="text-gray-600">AWB Number:</span>
+                              <span className="ml-2 font-mono text-blue-600">{selectedOrder.shipment.awb}</span>
+                            </div>
+                          )}
+                          {selectedOrder.shipment?.trackingUrl && (
+                            <div>
+                              <span className="text-gray-600">Tracking:</span>
+                              <a href={selectedOrder.shipment.trackingUrl} target="_blank" rel="noreferrer" className="ml-2 text-blue-600 underline hover:text-blue-800">Open Tracking →</a>
+                            </div>
+                          )}
+                          {selectedOrder.shipment?.status && (
+                            <div>
+                              <span className="text-gray-600">Status:</span>
+                              <span className={`ml-2 px-2 py-1 rounded text-xs font-medium inline-block ${
+                                selectedOrder.shipment.status === 'DEL' || selectedOrder.shipment.status === 'delivered' ? 'bg-green-100 text-green-700' :
+                                selectedOrder.shipment.status === 'RTO' || selectedOrder.shipment.isReturning ? 'bg-orange-100 text-orange-700' :
+                                selectedOrder.shipment.status === 'CAN' || selectedOrder.shipment.status === 'cancelled' ? 'bg-red-100 text-red-700' :
+                                'bg-blue-100 text-blue-700'
+                              }`}>{selectedOrder.shipment.statusDescription || selectedOrder.shipment.status}</span>
+                            </div>
+                          )}
+                          {selectedOrder.estimatedDelivery && (
+                            <div>
+                              <span className="text-gray-600">Estimated Delivery:</span>
+                              <span className="ml-2 font-medium">{new Date(selectedOrder.estimatedDelivery).toLocaleDateString()}</span>
+                            </div>
+                          )}
+                          {selectedOrder.deliveredAt && (
+                            <div>
+                              <span className="text-gray-600">Delivered On:</span>
+                              <span className="ml-2 font-medium text-green-600">{new Date(selectedOrder.deliveredAt).toLocaleDateString()}</span>
+                            </div>
+                          )}
+                          {selectedOrder.shipment?.isReturning && (
+                            <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded text-xs text-orange-700">⚠️ Return to Origin</div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Shipping Actions removed from modal per request */}
+                  </div>
+                </div>
+              )}
+
+              {/* Returns for your orders */}
+              <div className="mt-8">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Return & Replacement Requests</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="text-left py-3 px-4 font-medium text-gray-700">Request</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-700">Order</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-700">Type</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-700">Reason</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-700">Status</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-700">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {returnsForSeller.length === 0 ? (
+                        <tr><td colSpan="5" className="text-center py-6 text-gray-500">No return/replacement requests yet</td></tr>
+                      ) : (
+                        returnsForSeller.map(r => (
+                          <tr key={r._id} className="border-b border-gray-100 hover:bg-gray-50">
+                            <td className="py-3 px-4 font-mono">{r._id.slice(-6)}</td>
+                            <td className="py-3 px-4">#{r.order?.orderNumber || r.order?._id?.slice(-6) || '-'}</td>
+                            <td className="py-3 px-4 capitalize">{r.type}</td>
+                            <td className="py-3 px-4">{r.reasonCategory}</td>
+                            <td className="py-3 px-4">{r.status}</td>
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  className="px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded hover:bg-gray-200"
+                                  onClick={() => setReturnDetailsModal({ open: true, req: r })}
+                                >View</button>
+                                {r.status === 'approved' && !r.reverseAwb && r.order?._id && (
+                                  <button
+                                    className="px-2 py-1 text-xs bg-yellow-600 text-white rounded hover:bg-yellow-700 disabled:opacity-50"
+                                    onClick={() => handleReversePickup(r.order)}
+                                    disabled={reverseLoading}
+                                  >Reverse Pickup</button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              {returnDetailsModal.open && returnDetailsModal.req && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+                  <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-2xl mx-2 relative overflow-y-auto max-h-[90vh]">
+                    <button className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 text-2xl" onClick={() => setReturnDetailsModal({ open: false, req: null })}>&times;</button>
+                    <h3 className="text-lg font-semibold mb-3">Return/Replacement Details</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                      <div><span className="text-gray-500">Request:</span> <span className="font-mono">{returnDetailsModal.req._id}</span></div>
+                      <div><span className="text-gray-500">Status:</span> <span className="capitalize">{returnDetailsModal.req.status}</span></div>
+                      <div><span className="text-gray-500">Order:</span> #{returnDetailsModal.req.order?.orderNumber || returnDetailsModal.req.order?._id}</div>
+                      <div><span className="text-gray-500">Type:</span> <span className="capitalize">{returnDetailsModal.req.type}</span></div>
+                      <div className="md:col-span-2"><span className="text-gray-500">Reason:</span> {returnDetailsModal.req.reasonCategory}{returnDetailsModal.req.reasonText ? ` - ${returnDetailsModal.req.reasonText}` : ''}</div>
+                    </div>
+                    <div className="mt-4">
+                      <h4 className="font-semibold mb-2">Refund Method</h4>
+                      <div className="text-sm bg-gray-50 rounded p-3">
+                        <div><b>Mode:</b> {returnDetailsModal.req.refundDetails?.mode || '-'}</div>
+                        {returnDetailsModal.req.refundDetails?.mode === 'upi' && (
+                          <div><b>UPI ID:</b> {returnDetailsModal.req.refundDetails?.upiId || '-'}</div>
+                        )}
+                        {returnDetailsModal.req.refundDetails?.mode === 'bank' && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            <div><b>Account Holder:</b> {returnDetailsModal.req.refundDetails?.bank?.accountHolderName || '-'}</div>
+                            <div><b>Bank Name:</b> {returnDetailsModal.req.refundDetails?.bank?.bankName || '-'}</div>
+                            <div><b>Account Number:</b> {returnDetailsModal.req.refundDetails?.bank?.accountNumber || '-'}</div>
+                            <div><b>IFSC:</b> {returnDetailsModal.req.refundDetails?.bank?.ifscCode || '-'}</div>
+                          </div>
+                        )}
+                        {returnDetailsModal.req.refundDetails?.mode === 'wallet' && (
+                          <div><b>Wallet ID:</b> {returnDetailsModal.req.refundDetails?.walletId || '-'}</div>
+                        )}
+                      </div>
+                    </div>
+                    {(returnDetailsModal.req.reverseAwb || returnDetailsModal.req.reverseTrackingUrl) && (
+                      <div className="mt-4">
+                        <h4 className="font-semibold mb-2">Reverse Pickup</h4>
+                        <div className="text-sm bg-gray-50 rounded p-3">
+                          <div><b>AWB:</b> {returnDetailsModal.req.reverseAwb || '-'}</div>
+                          <div><b>Track:</b> {returnDetailsModal.req.reverseTrackingUrl ? (<a href={returnDetailsModal.req.reverseTrackingUrl} target="_blank" rel="noreferrer" className="text-blue-600 underline">{returnDetailsModal.req.reverseTrackingUrl}</a>) : '-'}</div>
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex justify-end mt-4">
+                      <button className="px-4 py-2 bg-gray-200 rounded" onClick={() => setReturnDetailsModal({ open: false, req: null })}>Close</button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1071,30 +1362,30 @@ const SellerDashboard = () => {
               </form>
               {couponStatus && <div className={`mb-4 text-sm ${couponStatus.includes('created') ? 'text-green-600' : 'text-red-600'}`}>{couponStatus}</div>}
               <div className="overflow-x-auto">
-                <table className="min-w-full bg-white border rounded">
+                <table className="min-w-full table-auto bg-white border rounded">
                   <thead>
-                    <tr>
-                      <th className="py-2 px-4 border-b">Code</th>
-                      <th className="py-2 px-4 border-b">Discount</th>
-                      <th className="py-2 px-4 border-b">Expiry</th>
-                      <th className="py-2 px-4 border-b">Usage Limit</th>
-                      <th className="py-2 px-4 border-b">Used By</th>
-                      <th className="py-2 px-4 border-b">Status</th>
-                      <th className="py-2 px-4 border-b">Actions</th>
+                    <tr className="bg-gray-50">
+                      <th className="py-2 px-4 border-b text-left whitespace-nowrap">Code</th>
+                      <th className="py-2 px-4 border-b text-left whitespace-nowrap">Discount</th>
+                      <th className="py-2 px-4 border-b text-left whitespace-nowrap">Expiry</th>
+                      <th className="py-2 px-4 border-b text-left whitespace-nowrap">Usage Limit</th>
+                      <th className="py-2 px-4 border-b text-left whitespace-nowrap">Used By</th>
+                      <th className="py-2 px-4 border-b text-left whitespace-nowrap">Status</th>
+                      <th className="py-2 px-4 border-b text-left whitespace-nowrap">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {coupons.map(coupon => (
-                      <tr key={coupon._id}>
-                        <td className="py-2 px-4 border-b font-mono">{coupon.code}</td>
-                        <td className="py-2 px-4 border-b">{coupon.discount}</td>
-                        <td className="py-2 px-4 border-b">{coupon.expiry ? new Date(coupon.expiry).toLocaleDateString() : ''}</td>
-                        <td className="py-2 px-4 border-b">{coupon.usageLimit || '∞'}</td>
-                        <td className="py-2 px-4 border-b">{coupon.usedBy?.length || 0}</td>
-                        <td className="py-2 px-4 border-b">
+                      <tr key={coupon._id} className="odd:bg-white even:bg-gray-50">
+                        <td className="py-2 px-4 border-b font-mono text-sm whitespace-nowrap">{coupon.code}</td>
+                        <td className="py-2 px-4 border-b text-sm whitespace-nowrap">{coupon.discount}</td>
+                        <td className="py-2 px-4 border-b text-sm whitespace-nowrap">{coupon.expiry ? new Date(coupon.expiry).toLocaleDateString() : ''}</td>
+                        <td className="py-2 px-4 border-b text-sm whitespace-nowrap">{coupon.usageLimit || '∞'}</td>
+                        <td className="py-2 px-4 border-b text-sm whitespace-nowrap">{coupon.usedBy?.length || 0}</td>
+                        <td className="py-2 px-4 border-b text-sm whitespace-nowrap">
                           {coupon.isActive ? <span className="text-green-600">Active</span> : <span className="text-gray-400">Inactive</span>}
                         </td>
-                        <td className="py-2 px-4 border-b">
+                        <td className="py-2 px-4 border-b text-sm whitespace-nowrap">
                           {coupon.isActive && (
                             <button onClick={() => handleDeactivateCoupon(coupon._id)} className="text-red-600 underline text-xs">Deactivate</button>
                           )}
@@ -1184,86 +1475,10 @@ const SellerDashboard = () => {
                 </div>
               </div>
 
-              {/* Transaction History Section */}
+              {/* Withdrawal History Section */}
               <div className="bg-white rounded-lg shadow border p-6">
-                <h3 className="text-lg font-semibold mb-4">Transaction History</h3>
-                
-                {/* Tabs */}
-                <div className="flex border-b mb-4">
-                  <button 
-                    onClick={() => setActiveWalletTab('transactions')}
-                    className={`py-2 px-4 font-medium flex items-center gap-2 ${
-                      activeWalletTab === 'transactions' 
-                        ? 'border-b-2 border-blue-600 text-blue-600' 
-                        : 'text-gray-600 hover:text-blue-600'
-                    }`}
-                  >
-                    <FaEye />
-                    Transactions
-                  </button>
-                  <button 
-                    onClick={() => setActiveWalletTab('withdrawals')}
-                    className={`py-2 px-4 font-medium flex items-center gap-2 ${
-                      activeWalletTab === 'withdrawals' 
-                        ? 'border-b-2 border-blue-600 text-blue-600' 
-                        : 'text-gray-600 hover:text-blue-600'
-                    }`}
-                  >
-                    <FaWallet />
-                    Withdrawals
-                  </button>
-                </div>
-
-                {/* Transactions Tab Content */}
-                {activeWalletTab === 'transactions' && (
+                <h3 className="text-lg font-semibold mb-4">Withdrawal History ({withdrawals.length})</h3>
                   <div>
-                    <h4 className="font-medium mb-4">Transaction History ({transactions.length})</h4>
-                    
-                    {walletLoading ? (
-                      <div className="text-center py-8">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                        <p className="mt-2 text-gray-500">Loading...</p>
-                      </div>
-                    ) : transactions.length === 0 ? (
-                      <div className="text-center py-8 text-gray-500">
-                        <FaWallet className="text-4xl mx-auto mb-2" />
-                        <p>No transactions found</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {transactions.map((transaction) => (
-                          <div key={transaction.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-                            <div className="flex items-center gap-4">
-                              <div className={`w-3 h-3 rounded-full ${transaction.type === 'credit' ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm font-medium">
-                                    {new Date(transaction.date).toLocaleDateString()}
-                                  </span>
-                                  <span className="text-xs text-gray-500">
-                                    {new Date(transaction.date).toLocaleTimeString()}
-                                  </span>
-                                </div>
-                                <p className="text-sm text-gray-600">{transaction.description}</p>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <div className={`font-semibold ${transaction.type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>
-                                {transaction.type === 'credit' ? '+' : '-'}{formatINR(transaction.amount)}
-                              </div>
-                              <div className="text-sm text-gray-500">Balance: {formatINR(transaction.balance)}</div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Withdrawals Tab Content */}
-                {activeWalletTab === 'withdrawals' && (
-                  <div>
-                    <h4 className="font-medium mb-4">Withdrawal History ({withdrawals.length})</h4>
                     
                     {walletLoading ? (
                       <div className="text-center py-8">
@@ -1327,7 +1542,6 @@ const SellerDashboard = () => {
                       </div>
                     )}
                   </div>
-                )}
               </div>
             </div>
           )}

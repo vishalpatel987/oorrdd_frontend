@@ -192,22 +192,24 @@ const VendorRegistration = () => {
 
   const renderStepIndicator = () => (
     <div className="flex items-center justify-center mb-8">
-      {[1, 2, 3, 4].map((step) => (
-        <div key={step} className="flex items-center">
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-            step <= currentStep 
-              ? 'bg-blue-600 text-white' 
-              : 'bg-gray-200 text-gray-600'
-          }`}>
-            {step < currentStep ? <FaCheck /> : step}
+      <div className="flex items-center gap-2 sm:gap-4">
+        {[1, 2, 3, 4].map((step) => (
+          <div key={step} className="flex items-center">
+            <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-sm sm:text-base font-semibold shadow-md transition-all ${
+              step <= currentStep 
+                ? 'bg-blue-600 text-white scale-105' 
+                : 'bg-gray-200 text-gray-600'
+            }`}>
+              {step < currentStep ? <FaCheck className="text-sm sm:text-base" /> : step}
+            </div>
+            {step < 4 && (
+              <div className={`w-8 sm:w-16 h-1 sm:h-1.5 mx-1 sm:mx-2 rounded-full transition-all ${
+                step < currentStep ? 'bg-blue-600' : 'bg-gray-200'
+              }`}></div>
+            )}
           </div>
-          {step < 4 && (
-            <div className={`w-16 h-1 mx-2 ${
-              step < currentStep ? 'bg-blue-600' : 'bg-gray-200'
-            }`}></div>
-          )}
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 
@@ -499,11 +501,6 @@ const VendorRegistration = () => {
     <div className="container mx-auto px-4 py-8">
       {/* Header */}
       <div className="mb-8">
-        <div className="flex items-center mb-4">
-          <Link to="/" className="text-blue-600 hover:text-blue-800">
-            ← Back to Home
-          </Link>
-        </div>
         <h1 className="text-3xl font-bold text-gray-800">Become a Vendor</h1>
         <p className="text-gray-600 mt-2">Join our marketplace and start selling your products to customers worldwide</p>
       </div>

@@ -40,7 +40,7 @@ const Cart = () => {
     <div className="container mx-auto px-4 py-8">
       {/* Header */}
       <div className="mb-8">
-        <div className="flex items-center mb-4">
+        <div className="hidden md:flex items-center mb-4">
           <Link to="/products" className="text-blue-600 hover:text-blue-800 flex items-center gap-2">
             <FaArrowLeft />
             Continue Shopping

@@ -8,6 +8,11 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
+import About from './pages/About';
+import Contact from './pages/Contact';
+import HelpCenter from './pages/HelpCenter';
+import ShippingInfo from './pages/ShippingInfo';
+import Returns from './pages/Returns';
 import ProductList from './pages/ProductList';
 import ProductDetail from './pages/ProductDetail';
 import Cart from './pages/Cart';
@@ -27,6 +32,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import Toast from './components/common/Toast';
 import ScrollToTop from './components/common/ScrollToTop';
 import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 
 function App() {
   const dispatch = useDispatch();
@@ -106,8 +112,14 @@ function App() {
             <Route path="/register" element={<Register />} />
             <Route path="/terms" element={<Terms />} />
             <Route path="/privacy" element={<Privacy />} />
+            <Route path="/about" element={<About />} />
+            <Route path="/contact" element={<Contact />} />
+            <Route path="/help" element={<HelpCenter />} />
+            <Route path="/shipping" element={<ShippingInfo />} />
+            <Route path="/returns" element={<Returns />} />
             <Route path="/vendor-registration" element={<VendorRegistration />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password/:token" element={<ResetPassword />} />
             <Route path="/products" element={<ProductList />} />
             <Route path="/products/:id" element={<ProductDetail />} />
             

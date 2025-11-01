@@ -68,7 +68,6 @@ const Categories = () => {
           <div className="flex justify-center items-center min-h-[200px]">Loading...</div>
         ) : selectedMain ? (
           <>
-            <button onClick={() => setSelectedMain(null)} className="mb-6 px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">&larr; Back to Categories</button>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
               {subcategories && subcategories.length > 0 ? subcategories.map((subcat) => (
                 <Link

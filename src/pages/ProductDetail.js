@@ -7,6 +7,7 @@ import { FaStar, FaShoppingCart, FaHeart, FaShare, FaTruck, FaShieldAlt, FaUndo 
 import { formatINR } from '../utils/formatCurrency';
 import productAPI from '../api/productAPI';
 import ProductDetail from '../components/common/ProductDetail';
+import ShareModal from '../components/ShareModal';
 import { toast } from 'react-toastify';
 import { setLoading } from '../redux/slices/authSlice';
 
@@ -17,6 +18,7 @@ const ProductDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
   const [selectedImage, setSelectedImage] = useState(0);
+  const [showShareModal, setShowShareModal] = useState(false);
   const isAuthenticated = useSelector(state => state.auth.isAuthenticated);
   const navigate = useNavigate();
 
@@ -70,8 +72,7 @@ const ProductDetailPage = () => {
   };
 
   const handleShare = (product) => {
-    navigator.clipboard.writeText(window.location.href);
-    alert('Product link copied to clipboard!');
+    setShowShareModal(true);
   };
 
   if (loading) {
@@ -96,13 +97,22 @@ const ProductDetailPage = () => {
   }
 
   return (
-    <ProductDetail
-      product={product}
-      onAddToCart={handleAddToCart}
-      onBuyNow={handleBuyNow}
-      onWishlist={handleWishlist}
-      onShare={handleShare}
-    />
+    <>
+      <ProductDetail
+        product={product}
+        onAddToCart={handleAddToCart}
+        onBuyNow={handleBuyNow}
+        onWishlist={handleWishlist}
+        onShare={handleShare}
+      />
+      <ShareModal
+        isOpen={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        productUrl={window.location.href}
+        productTitle={product?.name || 'Product'}
+        productImage={product?.images?.[0]?.url || product?.image || ''}
+      />
+    </>
   );
 };
 

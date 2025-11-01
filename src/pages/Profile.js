@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
-import { FaUser, FaEnvelope, FaPhone, FaMapMarkerAlt, FaEdit, FaSave, FaTimes, FaEye } from 'react-icons/fa';
+import { useNavigate } from 'react-router-dom';
+import { FaUser, FaEnvelope, FaMapMarkerAlt, FaEdit, FaSave, FaTimes, FaEye, FaUndo } from 'react-icons/fa';
 import { formatINR } from '../utils/formatCurrency';
 import orderAPI from '../api/orderAPI';
+import returnsAPI from '../api/returnsAPI';
+import ShippingAddresses from '../components/ShippingAddresses';
 
-const ORDER_STATUSES = [
-  'pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded'
-];
+// Removed unused ORDER_STATUSES
 
 const Profile = () => {
   const { user } = useSelector((state) => state.auth);
+  const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [profileData, setProfileData] = useState({
     firstName: '',
@@ -32,6 +34,11 @@ const Profile = () => {
   const [showCancelReasonModal, setShowCancelReasonModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [showOrderDrawer, setShowOrderDrawer] = useState(false);
+  const [returnModal, setReturnModal] = useState({ open: false, order: null });
+  const [returnForm, setReturnForm] = useState({ type: 'return', reasonCategory: 'defective', reasonText: '', refundDetails: { mode: 'upi', upiId: '' } });
+  const [returnLoading, setReturnLoading] = useState(false);
+  const [myReturnRequests, setMyReturnRequests] = useState([]);
+  const [showShippingAddresses, setShowShippingAddresses] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -65,6 +72,18 @@ const Profile = () => {
     if (user) fetchOrders();
   }, [user]);
 
+  useEffect(() => {
+    const fetchMyReturnRequests = async () => {
+      try {
+        const res = await returnsAPI.getMyReturnRequests();
+        setMyReturnRequests(res.data.requests || []);
+      } catch (err) {
+        // Silently fail, user can still see orders
+      }
+    };
+    if (user) fetchMyReturnRequests();
+  }, [user]);
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setProfileData(prev => ({
@@ -84,18 +103,7 @@ const Profile = () => {
     setIsEditing(false);
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'Delivered':
-        return 'text-green-600 bg-green-100';
-      case 'Shipped':
-        return 'text-blue-600 bg-blue-100';
-      case 'Processing':
-        return 'text-yellow-600 bg-yellow-100';
-      default:
-        return 'text-gray-600 bg-gray-100';
-    }
-  };
+  // removed unused getStatusColor helper
 
   // Handler to open order modal
   const handleViewOrder = (order) => {
@@ -317,13 +325,19 @@ const Profile = () => {
                   <span>View Order History</span>
                 </div>
               </button>
-              <button className="w-full text-left p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+              <button
+                className="w-full text-left p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                onClick={() => navigate('/contact')}
+              >
                 <div className="flex items-center gap-3">
                   <FaEnvelope className="text-blue-600" />
                   <span>Contact Support</span>
                 </div>
               </button>
-              <button className="w-full text-left p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+              <button
+                className="w-full text-left p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                onClick={() => setShowShippingAddresses(true)}
+              >
                 <div className="flex items-center gap-3">
                   <FaMapMarkerAlt className="text-blue-600" />
                   <span>Shipping Addresses</span>
@@ -368,12 +382,31 @@ const Profile = () => {
                         <td className="py-3 px-4 font-medium text-blue-600">{order.orderNumber || order._id}</td>
                         <td className="py-3 px-4">{new Date(order.createdAt).toLocaleDateString()}</td>
                         <td className="py-3 px-4">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${order.orderStatus === 'delivered' ? 'bg-green-100 text-green-600' : order.orderStatus === 'shipped' ? 'bg-blue-100 text-blue-600' : order.orderStatus === 'cancelled' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600'}`}>{order.orderStatus}</span>
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${order.orderStatus === 'delivered' ? 'bg-green-100 text-green-600' : order.orderStatus === 'shipped' ? 'bg-blue-100 text-blue-600' : order.orderStatus === 'cancelled' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600'}`}>{order.orderStatus}</span>
+                          {order.shipment?.isReturning && <span className="ml-2 text-xs text-orange-600">Returned to Seller</span>}
                         </td>
                         <td className="py-3 px-4">{formatINR(order.totalPrice)}</td>
                         <td className="py-3 px-4">{order.orderItems?.map(item => `${item.name} (x${item.quantity})`).join(', ')}</td>
                         <td className="py-3 px-4">
-                          <button className="text-blue-600 hover:text-blue-800" onClick={() => handleViewOrder(order)}><FaEye /></button>
+                          <div className="flex items-center gap-2">
+                            <button 
+                              className="text-blue-600 hover:text-blue-800 transition-colors duration-200" 
+                              onClick={() => handleViewOrder(order)} 
+                              title="View"
+                            >
+                              <FaEye />
+                            </button>
+                            {order.orderStatus === 'delivered' && (new Date().getTime() - new Date(order.deliveredAt || order.updatedAt).getTime() <= 10*24*60*60*1000) && !myReturnRequests.some(req => (req.order?._id === order._id || req.order?._id?.toString() === order._id?.toString()) && req.status !== 'closed') && (
+                              <button
+                                className="px-3 py-1.5 text-xs font-semibold bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-md hover:from-orange-600 hover:to-orange-700 shadow-sm hover:shadow-md transition-all duration-200 flex items-center gap-1.5 hover:scale-105 active:scale-95"
+                                onClick={() => setReturnModal({ open: true, order })}
+                                title="Return or Replace this order"
+                              >
+                                <FaUndo className="text-[10px]" />
+                                <span>Return/Replace</span>
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -421,6 +454,77 @@ const Profile = () => {
                     </table>
                   </div>
                   <div className="text-right font-bold text-lg mb-4">Total: {formatINR(selectedOrder.total || selectedOrder.totalPrice)}</div>
+                  
+                  {/* Shipping Details */}
+                  {selectedOrder.shipment && (
+                    <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                      <h3 className="text-sm font-semibold text-gray-800 mb-2">Shipping & Tracking</h3>
+                      <div className="space-y-2 text-sm">
+                        {selectedOrder.shipment?.courier && (
+                          <div>
+                            <span className="text-gray-600">Courier Partner:</span>
+                            <span className="ml-2 font-medium">{selectedOrder.shipment.courier}</span>
+                          </div>
+                        )}
+                        {selectedOrder.shipment?.awb && (
+                          <div>
+                            <span className="text-gray-600">AWB Number:</span>
+                            <span className="ml-2 font-mono text-blue-600">{selectedOrder.shipment.awb}</span>
+                          </div>
+                        )}
+                        {selectedOrder.shipment?.trackingUrl && (
+                          <div>
+                            <span className="text-gray-600">Tracking:</span>
+                            <a 
+                              href={selectedOrder.shipment.trackingUrl} 
+                              target="_blank" 
+                              rel="noreferrer" 
+                              className="ml-2 text-blue-600 underline hover:text-blue-800"
+                            >
+                              Track Your Order →
+                            </a>
+                          </div>
+                        )}
+                        {selectedOrder.shipment?.status && (
+                          <div>
+                            <span className="text-gray-600">Shipment Status:</span>
+                            <div className="ml-2 flex flex-col gap-1">
+                              <span className={`px-2 py-1 rounded text-xs font-medium inline-block ${
+                                selectedOrder.shipment.status === 'DEL' || selectedOrder.shipment.status === 'delivered' ? 'bg-green-100 text-green-700' :
+                                selectedOrder.shipment.status === 'RTO' || selectedOrder.shipment.status === 'RTO_REQ' || selectedOrder.shipment.status === 'RTO_INT' || selectedOrder.shipment.status === 'RTO_RAD' || selectedOrder.shipment.status === 'RTO_OFD' || selectedOrder.shipment.status === 'RTO_DEL' || selectedOrder.shipment.status === 'RTO_UND' || selectedOrder.shipment.status === 'rto' || selectedOrder.shipment.isReturning ? 'bg-orange-100 text-orange-700' :
+                                selectedOrder.shipment.status === 'CAN' || selectedOrder.shipment.status === 'cancelled' ? 'bg-red-100 text-red-700' :
+                                selectedOrder.shipment.status === 'INT' || selectedOrder.shipment.status === 'SPD' || selectedOrder.shipment.status === 'OFD' || selectedOrder.shipment.status === 'shipped' ? 'bg-blue-100 text-blue-700' :
+                                'bg-gray-100 text-gray-700'
+                              }`}>
+                                {selectedOrder.shipment.statusDescription || selectedOrder.shipment.status}
+                              </span>
+                              {selectedOrder.shipment.isReturning && (
+                                <span className="text-xs text-orange-600 font-medium">⚠️ Return to Origin</span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        {selectedOrder.estimatedDelivery && (
+                          <div>
+                            <span className="text-gray-600">Estimated Delivery:</span>
+                            <span className="ml-2 font-medium">{new Date(selectedOrder.estimatedDelivery).toLocaleDateString()}</span>
+                          </div>
+                        )}
+                        {selectedOrder.deliveredAt && (
+                          <div>
+                            <span className="text-gray-600">Delivered On:</span>
+                            <span className="ml-2 font-medium text-green-600">{new Date(selectedOrder.deliveredAt).toLocaleDateString()}</span>
+                          </div>
+                        )}
+                        {selectedOrder.shipment?.isReturning && (
+                          <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded text-xs text-orange-700">
+                            ⚠️ This order has been returned to the seller
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Refund/Cancellation status hints for the user */}
                   {selectedOrder.cancellationRequested && selectedOrder.orderStatus !== 'cancelled' && (
                     <div className="text-yellow-600 text-sm mb-3">Cancellation requested. Awaiting admin approval.</div>
@@ -473,6 +577,90 @@ const Profile = () => {
           </div>
         </div>
       )}
+
+      {/* Return/Replacement Modal */}
+      {returnModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg mx-2 relative">
+            <button className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 text-2xl" onClick={() => setReturnModal({ open: false, order: null })}>&times;</button>
+            <h3 className="text-lg font-semibold mb-3">Return or Replacement</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium mb-1">Request Type</label>
+                <select className="w-full border rounded p-2" value={returnForm.type} onChange={e => setReturnForm({ ...returnForm, type: e.target.value })}>
+                  <option value="return">Return</option>
+                  <option value="replacement">Replacement</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Reason</label>
+                <select className="w-full border rounded p-2" value={returnForm.reasonCategory} onChange={e => setReturnForm({ ...returnForm, reasonCategory: e.target.value })}>
+                  <option value="defective">Defective/Damaged</option>
+                  <option value="wrong_item">Wrong Item</option>
+                  <option value="not_as_described">Not as described</option>
+                  <option value="size_issue">Size/Variant Issue</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+            </div>
+            <label className="block text-sm font-medium mt-3">Details (optional)</label>
+            <textarea className="w-full border rounded p-2 h-24" value={returnForm.reasonText} onChange={e => setReturnForm({ ...returnForm, reasonText: e.target.value })} />
+            <div className="mt-3">
+              <label className="block text-sm font-medium mb-1">Refund Method</label>
+              <select className="w-full border rounded p-2" value={returnForm.refundDetails.mode} onChange={e => setReturnForm({ ...returnForm, refundDetails: { mode: e.target.value } })}>
+                <option value="upi">UPI</option>
+                <option value="bank">Bank</option>
+                <option value="wallet">Wallet Balance</option>
+              </select>
+              {returnForm.refundDetails.mode === 'upi' && (
+                <input className="w-full border rounded p-2 mt-2" placeholder="UPI ID" value={returnForm.refundDetails.upiId || ''} onChange={e => setReturnForm({ ...returnForm, refundDetails: { ...returnForm.refundDetails, upiId: e.target.value } })} />
+              )}
+              {returnForm.refundDetails.mode === 'bank' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
+                  <input className="border rounded p-2" placeholder="Account Holder Name" onChange={e => setReturnForm({ ...returnForm, refundDetails: { ...returnForm.refundDetails, bank: { ...returnForm.refundDetails.bank, accountHolderName: e.target.value } } })} />
+                  <input className="border rounded p-2" placeholder="Bank Name" onChange={e => setReturnForm({ ...returnForm, refundDetails: { ...returnForm.refundDetails, bank: { ...returnForm.refundDetails.bank, bankName: e.target.value } } })} />
+                  <input className="border rounded p-2" placeholder="Account Number" onChange={e => setReturnForm({ ...returnForm, refundDetails: { ...returnForm.refundDetails, bank: { ...returnForm.refundDetails.bank, accountNumber: e.target.value } } })} />
+                  <input className="border rounded p-2" placeholder="IFSC" onChange={e => setReturnForm({ ...returnForm, refundDetails: { ...returnForm.refundDetails, bank: { ...returnForm.refundDetails.bank, ifscCode: e.target.value } } })} />
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 mt-4">
+              <button className="px-4 py-2 bg-gray-200 rounded" onClick={() => setReturnModal({ open: false, order: null })}>Close</button>
+              <button
+                className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50"
+                disabled={returnLoading}
+                onClick={async () => {
+                  if (!returnModal.order) return;
+                  setReturnLoading(true);
+                  try {
+                    await returnsAPI.create({
+                      orderId: returnModal.order._id,
+                      type: returnForm.type,
+                      reasonCategory: returnForm.reasonCategory,
+                      reasonText: returnForm.reasonText,
+                      refundDetails: returnForm.refundDetails
+                    });
+                    setReturnModal({ open: false, order: null });
+                    // Refresh return requests to hide the button
+                    const res = await returnsAPI.getMyReturnRequests();
+                    setMyReturnRequests(res.data.requests || []);
+                  } catch (e) {
+                    alert(e.response?.data?.message || 'Failed to create request');
+                  } finally {
+                    setReturnLoading(false);
+                  }
+                }}
+              >{returnLoading ? 'Submitting...' : 'Submit Request'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Shipping Addresses Modal */}
+      <ShippingAddresses
+        isOpen={showShippingAddresses}
+        onClose={() => setShowShippingAddresses(false)}
+      />
     </div>
   );
 };

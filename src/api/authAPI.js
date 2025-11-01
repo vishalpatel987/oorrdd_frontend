@@ -39,6 +39,11 @@ const authAPI = {
     return axiosInstance.put(`/auth/reset-password/${token}`, { password });
   },
 
+  // Forgot password via OTP (enabled)
+  forgotPasswordOTP: (email) => axiosInstance.post('/auth/forgot-password-otp', { email }),
+  verifyPasswordOTP: (payload) => axiosInstance.post('/auth/verify-otp', payload), // { email, otp }
+  resetPasswordWithOTP: (payload) => axiosInstance.put('/auth/reset-password-otp', payload), // { email, password, confirmPassword }
+
   // Verify email
   verifyEmail: (token) => {
     return axiosInstance.get(`/auth/verify-email/${token}`);
