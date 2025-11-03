@@ -50,7 +50,7 @@ const contentVariants = {
 
 const HeroCarousel = () => {
   return (
-    <section className="relative w-full min-h-[30vh] md:min-h-[80vh] flex items-center justify-center overflow-hidden">
+    <section className="relative w-full min-h-[30vh] md:min-h-[80vh] flex items-center justify-center overflow-hidden max-w-full">
       <Swiper
         modules={[Autoplay, Navigation, Pagination, A11y]}
         autoplay={{ 
@@ -95,9 +95,9 @@ const HeroCarousel = () => {
                 }}
               />
             </div>
-            <div className="relative z-10 flex flex-col items-center justify-center h-[30vh] md:h-[100vh] px-4">
+            <div className="relative z-10 flex flex-col items-center justify-center h-[30vh] md:h-[100vh] w-full px-3 sm:px-4 md:px-6 max-w-full overflow-visible">
               <motion.div
-                className="text-center"
+                className="text-center w-full max-w-full"
                 initial="initial"
                 whileInView="animate"
                 exit="exit"
@@ -113,10 +113,11 @@ const HeroCarousel = () => {
                     ease: [0.25, 0.46, 0.45, 0.94],
                     delay: 0.3
                   }}
+                  className="w-full max-w-full"
                 >
                   <Link
                     to={slide.buttonLink}
-                    className="inline-block bg-white/90 backdrop-blur-sm text-primary-600 px-8 py-4 md:px-10 md:py-5 rounded-full font-semibold hover:bg-white hover:scale-105 transition-all duration-500 ease-out text-sm md:text-base shadow-lg hover:shadow-xl"
+                    className="inline-block bg-white/90 backdrop-blur-sm text-primary-600 px-6 py-3 sm:px-8 sm:py-4 md:px-10 md:py-5 rounded-full font-semibold hover:bg-white hover:scale-105 transition-all duration-500 ease-out text-xs sm:text-sm md:text-base shadow-lg hover:shadow-xl whitespace-nowrap"
                   >
                     {slide.buttonText}
                   </Link>

@@ -67,17 +67,30 @@ const Header = () => {
     fetchUnreadCounts();
     
     // Set up socket connection for unread updates with better error handling
-    const SOCKET_URL = process.env.REACT_APP_API_URL?.replace('/api', '') || 'http://localhost:5000';
+    // In development, always use localhost:5000 (backend server)
+    // In production, use REACT_APP_API_URL or default to production backend
+    let SOCKET_URL;
+    if (process.env.NODE_ENV === 'development') {
+      // Force localhost:5000 in development (override any incorrect env vars)
+      SOCKET_URL = 'http://localhost:5000';
+    } else {
+      // Production: use env var or default to production backend
+      SOCKET_URL = process.env.REACT_APP_API_URL?.replace('/api', '') || 'https://oorrdd-backend.onrender.com';
+    }
     
     try {
       socketRef.current = io(SOCKET_URL, { 
         transports: ['websocket', 'polling'],
         timeout: 20000,
-        forceNew: true
+        forceNew: true,
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        reconnectionAttempts: 5
       });
       
       socketRef.current.on('connect', () => {
-        console.log('Socket connected successfully');
+        console.log('Socket connected successfully to:', SOCKET_URL);
         socketRef.current.emit('join', user._id);
       });
       
@@ -87,6 +100,10 @@ const Header = () => {
       
       socketRef.current.on('connect_error', (error) => {
         console.log('Socket connection error:', error.message);
+        // Don't show error if it's a known development issue
+        if (process.env.NODE_ENV === 'production') {
+          console.warn('⚠️ WebSocket connection failed. Real-time features may not work.');
+        }
       });
       
       socketRef.current.on('unreadCountsUpdate', (unreadCounts) => {

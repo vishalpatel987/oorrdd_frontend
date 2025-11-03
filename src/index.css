@@ -45,21 +45,43 @@ code {
 /* Hero Carousel Styles - Professional & Smooth */
 .hero-carousel {
   overflow: hidden !important;
+  max-width: 100% !important;
+  width: 100% !important;
 }
 
 .hero-carousel .swiper-wrapper {
   transition-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
   will-change: transform;
+  max-width: 100% !important;
+  width: 100% !important;
 }
 
 .hero-carousel .swiper-slide {
   transition: all 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
   will-change: transform, opacity;
+  max-width: 100% !important;
+  width: 100% !important;
+  overflow: visible !important;
 }
 
 .hero-carousel .swiper-slide img {
   transition: all 1.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
   will-change: transform, opacity;
+  max-width: 100% !important;
+  width: 100% !important;
+  object-fit: cover !important;
+}
+
+/* Mobile-specific fixes for hero carousel */
+@media (max-width: 640px) {
+  .hero-carousel .swiper-slide {
+    padding: 0 !important;
+  }
+  
+  .hero-carousel .swiper-slide > div {
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+  }
 }
 
 .hero-carousel .swiper-slide-active {

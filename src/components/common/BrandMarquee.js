@@ -1,76 +1,77 @@
 import React from 'react';
 
 // Example brand data for different categories
+// NOTE: Removed external logo URLs to prevent 404 errors - logos are handled by getBrandLogo() function
 const brandMap = {
   Electronics: [
-    { name: 'Samsung', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/24/Samsung_Logo.svg' },
-    { name: 'Apple', logo: 'https://upload.wikimedia.org/wikipedia/commons/f/fa/Apple_logo_black.svg' },
-    { name: 'Sony', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/20/Sony_wordmark.svg' },
-    { name: 'OnePlus', logo: 'https://upload.wikimedia.org/wikipedia/commons/6/6e/OnePlus_logo.svg' },
-    { name: 'Vivo', logo: 'https://upload.wikimedia.org/wikipedia/commons/6/6b/Vivo_logo_2019.svg' },
-    { name: 'Oppo', logo: 'https://upload.wikimedia.org/wikipedia/commons/5/5a/OPPO_LOGO_2019.svg' },
-    { name: 'Realme', logo: 'https://upload.wikimedia.org/wikipedia/commons/6/6e/Realme_logo.svg' },
-    { name: 'Xiaomi', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/29/Xiaomi_logo.svg' },
-    { name: 'Motorola', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/2b/Motorola_logo.svg' },
-    { name: 'Nokia', logo: 'https://upload.wikimedia.org/wikipedia/commons/7/7a/Nokia_wordmark.svg' },
+    { name: 'Samsung' },
+    { name: 'Apple' },
+    { name: 'Sony' },
+    { name: 'OnePlus' },
+    { name: 'Vivo' },
+    { name: 'Oppo' },
+    { name: 'Realme' },
+    { name: 'Xiaomi' },
+    { name: 'Motorola' },
+    { name: 'Nokia' },
   ],
   Fashion: [
-    { name: 'Nike', logo: 'https://upload.wikimedia.org/wikipedia/commons/a/a6/Logo_NIKE.svg' },
-    { name: 'Adidas', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/20/Adidas_Logo.svg' },
-    { name: 'Puma', logo: 'https://upload.wikimedia.org/wikipedia/commons/f/fd/Puma_logo.svg' },
-    { name: 'Zara', logo: 'https://upload.wikimedia.org/wikipedia/commons/0/0b/Zara_Logo.svg' },
-    { name: 'H&M', logo: 'https://upload.wikimedia.org/wikipedia/commons/5/53/H%26M-Logo.svg' },
-    { name: 'Levi\'s', logo: 'https://upload.wikimedia.org/wikipedia/commons/6/6d/Levi%27s_logo.svg' },
-    { name: 'Gucci', logo: 'https://upload.wikimedia.org/wikipedia/commons/6/6e/Gucci_Logo.svg' },
-    { name: 'Louis Vuitton', logo: 'https://upload.wikimedia.org/wikipedia/commons/7/7c/Louis_Vuitton_logo_and_wordmark.svg' },
+    { name: 'Nike' },
+    { name: 'Adidas' },
+    { name: 'Puma' },
+    { name: 'Zara' },
+    { name: 'H&M' },
+    { name: 'Levi\'s' },
+    { name: 'Gucci' },
+    { name: 'Louis Vuitton' },
   ],
   Books: [
-    { name: 'Penguin', logo: 'https://upload.wikimedia.org/wikipedia/commons/6/6f/Penguin_Books_logo.svg' },
-    { name: 'HarperCollins', logo: 'https://upload.wikimedia.org/wikipedia/commons/4/4a/HarperCollins_logo.svg' },
-    { name: 'Simon & Schuster', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/2b/Simon_%26_Schuster_logo.svg' },
-    { name: 'Random House', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/2e/Random_House_logo.svg' },
+    { name: 'Penguin' },
+    { name: 'HarperCollins' },
+    { name: 'Simon & Schuster' },
+    { name: 'Random House' },
   ],
   Home: [
-    { name: 'IKEA', logo: 'https://upload.wikimedia.org/wikipedia/commons/8/8e/Ikea_logo.svg' },
-    { name: 'Philips', logo: 'https://upload.wikimedia.org/wikipedia/commons/6/6e/Philips_logo.svg' },
-    { name: 'Whirlpool', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/2a/Whirlpool_logo.svg' },
-    { name: 'LG', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/2d/LG_logo_%282015%29.svg' },
+    { name: 'IKEA' },
+    { name: 'Philips' },
+    { name: 'Whirlpool' },
+    { name: 'LG' },
   ],
   Sports: [
-    { name: 'Nike', logo: 'https://upload.wikimedia.org/wikipedia/commons/a/a6/Logo_NIKE.svg' },
-    { name: 'Adidas', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/20/Adidas_Logo.svg' },
-    { name: 'Puma', logo: 'https://upload.wikimedia.org/wikipedia/commons/f/fd/Puma_logo.svg' },
-    { name: 'Reebok', logo: 'https://upload.wikimedia.org/wikipedia/commons/3/3e/Reebok_2019_logo.svg' },
+    { name: 'Nike' },
+    { name: 'Adidas' },
+    { name: 'Puma' },
+    { name: 'Reebok' },
   ],
   Beauty: [
-    { name: 'L\'Oreal', logo: 'https://upload.wikimedia.org/wikipedia/commons/7/7e/Logo_L%27Oreal.svg' },
-    { name: 'Maybelline', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/2e/Maybelline_logo.svg' },
-    { name: 'Lakme', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/2e/Lakme_logo.svg' },
-    { name: 'Dove', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/2c/Dove_logo.svg' },
+    { name: 'L\'Oreal' },
+    { name: 'Maybelline' },
+    { name: 'Lakme' },
+    { name: 'Dove' },
   ],
   Automotive: [
-    { name: 'Toyota', logo: 'https://upload.wikimedia.org/wikipedia/commons/9/9d/Toyota_logo.svg' },
-    { name: 'Honda', logo: 'https://upload.wikimedia.org/wikipedia/commons/7/7b/Honda-logo.svg' },
-    { name: 'Ford', logo: 'https://upload.wikimedia.org/wikipedia/commons/3/3e/Ford_logo_flat.svg' },
-    { name: 'BMW', logo: 'https://upload.wikimedia.org/wikipedia/commons/4/44/BMW.svg' },
+    { name: 'Toyota' },
+    { name: 'Honda' },
+    { name: 'Ford' },
+    { name: 'BMW' },
   ],
   Food: [
-    { name: 'Nestle', logo: 'https://upload.wikimedia.org/wikipedia/commons/6/6e/Nestle_textlogo.svg' },
-    { name: 'Kellogg\'s', logo: 'https://upload.wikimedia.org/wikipedia/commons/0/0b/Kellogg%27s_logo.svg' },
-    { name: 'Pepsi', logo: 'https://upload.wikimedia.org/wikipedia/commons/6/6b/Pepsi_logo_2014.svg' },
-    { name: 'Coca-Cola', logo: 'https://upload.wikimedia.org/wikipedia/commons/1/16/Coca-Cola_logo.svg' },
+    { name: 'Nestle' },
+    { name: 'Kellogg\'s' },
+    { name: 'Pepsi' },
+    { name: 'Coca-Cola' },
   ],
   Jewelry: [
-    { name: 'Tiffany & Co.', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/2e/Tiffany_%26_Co._logo.svg' },
-    { name: 'Cartier', logo: 'https://upload.wikimedia.org/wikipedia/commons/6/6e/Cartier_logo.svg' },
-    { name: 'Swarovski', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/2e/Swarovski_logo.svg' },
-    { name: 'Pandora', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/2e/Pandora_logo.svg' },
+    { name: 'Tiffany & Co.' },
+    { name: 'Cartier' },
+    { name: 'Swarovski' },
+    { name: 'Pandora' },
   ],
   Pets: [
-    { name: 'Pedigree', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/2e/Pedigree_logo.svg' },
-    { name: 'Whiskas', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/2e/Whiskas_logo.svg' },
-    { name: 'Purina', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/2e/Purina_logo.svg' },
-    { name: 'Royal Canin', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/2e/Royal_Canin_logo.svg' },
+    { name: 'Pedigree' },
+    { name: 'Whiskas' },
+    { name: 'Purina' },
+    { name: 'Royal Canin' },
   ],
 };
 
@@ -94,7 +95,13 @@ const BrandMarquee = ({ category }) => {
 
   const getBrandLogo = (brand) => {
     const key = normalize(brand?.name);
-    return brand?.logo || localBrandLogoMap[key] || '/images/logo.png';
+    // Prioritize local logos first to avoid 404 errors
+    if (localBrandLogoMap[key]) {
+      return localBrandLogoMap[key];
+    }
+    // Don't use external URLs - they cause 404 errors
+    // Use default logo instead for all brands without local logos
+    return '/images/logo.png';
   };
 
   let brands = [];
@@ -120,12 +127,10 @@ const BrandMarquee = ({ category }) => {
                 alt={brand.name}
                 className="h-12 w-auto mb-2 object-contain grayscale hover:grayscale-0 transition duration-300"
                 loading="lazy"
-                referrerPolicy="no-referrer"
-                crossOrigin="anonymous"
                 onError={(e) => {
-                  if (!e.target.src.endsWith('/images/logo.png')) {
-                    e.target.src = '/images/logo.png';
-                  }
+                  // Final fallback if default logo also fails
+                  e.target.src = '/images/logo.png';
+                  e.target.onerror = null; // Prevent infinite loop
                 }}
                 style={{ maxWidth: 80 }}
               />
