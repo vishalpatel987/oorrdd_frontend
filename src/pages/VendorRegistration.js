@@ -193,22 +193,22 @@ const VendorRegistration = () => {
   const renderStepIndicator = () => (
     <div className="flex items-center justify-center mb-8">
       <div className="flex items-center gap-2 sm:gap-4">
-        {[1, 2, 3, 4].map((step) => (
-          <div key={step} className="flex items-center">
+      {[1, 2, 3, 4].map((step) => (
+        <div key={step} className="flex items-center">
             <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-sm sm:text-base font-semibold shadow-md transition-all ${
-              step <= currentStep 
+            step <= currentStep 
                 ? 'bg-blue-600 text-white scale-105' 
-                : 'bg-gray-200 text-gray-600'
-            }`}>
+              : 'bg-gray-200 text-gray-600'
+          }`}>
               {step < currentStep ? <FaCheck className="text-sm sm:text-base" /> : step}
-            </div>
-            {step < 4 && (
-              <div className={`w-8 sm:w-16 h-1 sm:h-1.5 mx-1 sm:mx-2 rounded-full transition-all ${
-                step < currentStep ? 'bg-blue-600' : 'bg-gray-200'
-              }`}></div>
-            )}
           </div>
-        ))}
+          {step < 4 && (
+              <div className={`w-8 sm:w-16 h-1 sm:h-1.5 mx-1 sm:mx-2 rounded-full transition-all ${
+              step < currentStep ? 'bg-blue-600' : 'bg-gray-200'
+            }`}></div>
+          )}
+        </div>
+      ))}
       </div>
     </div>
   );

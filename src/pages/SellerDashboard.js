@@ -1260,10 +1260,10 @@ const SellerDashboard = () => {
                               <FaEye />
                             </button>
                             {/* Invoice - always available */}
-                            <button
+                              <button
                               className="px-2 py-1 bg-gray-700 text-white rounded text-xs hover:bg-gray-800"
-                              onClick={async () => {
-                                try {
+                                onClick={async () => {
+                                  try {
                                   const res = await orderAPI.getInvoice(order._id);
                                   const contentType = res.headers['content-type'] || 'application/pdf';
                                   const blob = new Blob([res.data], { type: contentType });

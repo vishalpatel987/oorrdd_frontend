@@ -133,7 +133,7 @@ const AdminDashboard = () => {
   const handleDeleteEventBanner = async (id) => {
     setEventError('');
     setEventLoading(true);
-    try {
+      try {
       if (id) {
         await productAPI.deleteEventBannerById(id);
       } else {
@@ -145,10 +145,10 @@ const AdminDashboard = () => {
       const msg = error.response?.data?.message || 'Failed to delete event banner';
       setEventError(msg);
       toast.error(msg);
-    } finally {
+      } finally {
       setEventLoading(false);
-    }
-  };
+      }
+    };
 
 
   // Fetch returns when tab active
@@ -2069,7 +2069,7 @@ const AdminDashboard = () => {
                                   s.status === 'INT' || s.status === 'SPD' || s.status === 'OFD' || s.status === 'shipped' ? 'bg-blue-100 text-blue-700' :
                                   'bg-gray-100 text-gray-700'
                                 }`}>{s.statusDescription || s.status}</span>
-                              </div>
+                </div>
                             )}
                             {selectedOrder.estimatedDelivery && (
                               <div><span className="text-gray-600">Estimated Delivery:</span><span className="ml-2 font-medium">{new Date(selectedOrder.estimatedDelivery).toLocaleDateString()}</span></div>
@@ -2265,7 +2265,7 @@ const AdminDashboard = () => {
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <h5 className="font-semibold text-gray-800 mb-1">{banner.title}</h5>
-                          <p className="text-sm text-gray-600 mb-2">{banner.description}</p>
+                      <p className="text-sm text-gray-600 mb-2">{banner.description}</p>
                           <p className="text-xs text-gray-500">Ends: {banner.endDate ? new Date(banner.endDate).toLocaleString() : '-'}</p>
                         </div>
                         <div className="flex flex-col gap-2">
@@ -2282,7 +2282,7 @@ const AdminDashboard = () => {
                       </div>
                     </div>
                   ))}
-                </div>
+                    </div>
                   </div>
             </div>
           )}

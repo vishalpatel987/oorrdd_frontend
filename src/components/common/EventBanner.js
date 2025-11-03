@@ -80,10 +80,10 @@ const EventBanner = () => {
   const next = () => setCurrent((i) => (i + 1) % events.length);
 
   return (
-    <section className="w-full my-12 max-w-full overflow-hidden">
-      <div className="relative max-w-full">
-        <div className="w-full bg-gradient-to-r from-pink-100 to-blue-100 rounded-xl shadow-lg p-3 sm:p-4 md:p-8 max-w-full overflow-hidden">
-      <div className="flex flex-col md:flex-row items-center justify-center gap-6 sm:gap-8 md:gap-12 relative transition-all duration-500 max-w-full overflow-visible">
+    <section className="w-full my-12">
+      <div className="relative">
+        <div className="w-full bg-gradient-to-r from-pink-100 to-blue-100 rounded-xl shadow-lg p-4 md:p-8">
+      <div className="flex flex-col md:flex-row items-center justify-center gap-8 md:gap-12 relative transition-all duration-500">
         {/* Left: Product */}
         <div className="flex flex-col items-center md:items-center w-full md:w-1/3 mb-6 md:mb-0">
           <img
