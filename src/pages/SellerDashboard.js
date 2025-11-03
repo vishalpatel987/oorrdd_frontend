@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FaPlus, FaEdit, FaTrash, FaEye, FaChartLine, FaBox, FaDollarSign, FaUsers, FaCog, FaTimes, FaWallet } from 'react-icons/fa';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar } from 'recharts';
 import { formatINR } from '../utils/formatCurrency';
 import sellerAPI from '../api/sellerAPI';
 import axiosInstance from '../api/axiosConfig';
@@ -7,6 +8,7 @@ import productAPI from '../api/productAPI';
 import { useSelector, useDispatch } from 'react-redux';
 import { fetchOrders } from '../redux/slices/orderSlice';
 import shippingAPI from '../api/shippingAPI';
+import orderAPI from '../api/orderAPI';
 import VariantManager from '../components/common/VariantManager';
 import walletAPI from '../api/walletAPI';
 import axios from 'axios';
@@ -24,6 +26,107 @@ const getCategoryPath = (categories, subcatId) => {
     }
   }
   return '';
+};
+
+// --- Reviews component ---
+const SellerReviews = () => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [reviews, setReviews] = useState([]);
+  const [replyByReview, setReplyByReview] = useState({}); // { [reviewId]: text }
+  const [editingReviewId, setEditingReviewId] = useState(null);
+
+  const loadReviews = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await sellerAPI.getMyReviews();
+      setReviews(res.data || []);
+    } catch (e) {
+      setError(e.response?.data?.message || 'Failed to load reviews');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadReviews(); }, []);
+
+  const handleReply = async (r) => {
+    const text = (replyByReview[r.reviewId] ?? '').trim();
+    if (!text) { alert('Enter reply'); return; }
+    try {
+      await sellerAPI.replyToReview(r.productId, r.reviewId, text);
+      setReplyByReview(prev => ({ ...prev, [r.reviewId]: '' }));
+      setEditingReviewId(null);
+      await loadReviews();
+    } catch (e) {
+      alert(e.response?.data?.message || 'Reply failed');
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-lg shadow-md p-4">
+      {loading ? (
+        <div>Loading...</div>
+      ) : error ? (
+        <div className="text-red-600 text-sm">{error}</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-200">
+                <th className="text-left py-3 px-4">Product</th>
+                <th className="text-left py-3 px-4">Customer</th>
+                <th className="text-left py-3 px-4">Rating</th>
+                <th className="text-left py-3 px-4">Comment</th>
+                <th className="text-left py-3 px-4">Reply</th>
+                <th className="text-left py-3 px-4">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(!reviews || reviews.length === 0) ? (
+                <tr><td colSpan="6" className="text-center py-6 text-gray-500">No reviews yet</td></tr>
+              ) : reviews.map((r) => (
+                <tr key={r.reviewId} className="border-b border-gray-100 align-top">
+                  <td className="py-3 px-4 font-medium">{r.productName}</td>
+                  <td className="py-3 px-4">{r.userName}</td>
+                  <td className="py-3 px-4">{String(r.rating || 0)}/5</td>
+                  <td className="py-3 px-4 max-w-xs">{r.comment}</td>
+                  <td className="py-3 px-4 w-96">
+                    {(editingReviewId === r.reviewId) || !(r.sellerReply && r.sellerReply.text) ? (
+                      <div>
+                        <textarea
+                          className="w-full border rounded p-2"
+                          rows={2}
+                          placeholder="Write a reply"
+                          value={replyByReview[r.reviewId] ?? (r.sellerReply?.text || '')}
+                          onChange={(e) => setReplyByReview(prev => ({ ...prev, [r.reviewId]: e.target.value }))}
+                        />
+                        <div className="mt-2 flex gap-2">
+                          <button onClick={() => handleReply(r)} className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700">Save</button>
+                          <button onClick={() => { setEditingReviewId(null); setReplyByReview(prev => ({ ...prev, [r.reviewId]: '' })); }} className="px-3 py-1 bg-gray-100 rounded text-xs">Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-gray-700">
+                        <div className="p-2 bg-green-50 border border-green-200 rounded">{r.sellerReply.text}</div>
+                        <div className="text-xs text-gray-500 mt-1">Replied {r.sellerReply.at ? new Date(r.sellerReply.at).toLocaleString() : ''}</div>
+                      </div>
+                    )}
+                  </td>
+                  <td className="py-3 px-4">
+                    {(editingReviewId !== r.reviewId) && (r.sellerReply && r.sellerReply.text) && (
+                      <button onClick={() => { setEditingReviewId(r.reviewId); setReplyByReview(prev => ({ ...prev, [r.reviewId]: r.sellerReply?.text || '' })); }} className="px-3 py-1 bg-gray-100 rounded text-xs">Edit</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
 };
 
 const CategoryTreeSelector = ({ categories, selected, onSelect }) => {
@@ -180,6 +283,11 @@ const SellerDashboard = () => {
   const [soldCountEdits, setSoldCountEdits] = useState({});
   const [soldCountLoading, setSoldCountLoading] = useState({});
 
+  // Sales report & status summary state
+  const [salesPeriod, setSalesPeriod] = useState('daily'); // daily | monthly | yearly
+  const [salesReport, setSalesReport] = useState([]);
+  const [statusSummary, setStatusSummary] = useState({ pending: 0, shipped: 0, delivered: 0, confirmed: 0, processing: 0, cancelled: 0, refunded: 0 });
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'active':
@@ -242,6 +350,27 @@ const SellerDashboard = () => {
       .catch(() => setStats({ totalSales: 0, totalOrders: 0, totalProducts: 0, totalCustomers: 0 }))
       .finally(() => setStatsLoading(false));
   }, []);
+
+  // Fetch status summary when on overview tab
+  useEffect(() => {
+    if (activeTab === 'overview') {
+      sellerAPI.getOrderStatusSummary()
+        .then(res => setStatusSummary(res.data?.summary || {}))
+        .catch(() => setStatusSummary({ pending: 0, shipped: 0, delivered: 0, confirmed: 0, processing: 0, cancelled: 0, refunded: 0 }));
+    }
+  }, [activeTab]);
+
+  // Fetch sales report when overview tab or salesPeriod changes
+  useEffect(() => {
+    if (activeTab === 'overview') {
+      sellerAPI.getSalesReport({ period: salesPeriod })
+        .then(res => {
+          const data = (res.data?.data || []).map(d => ({ date: d._id, revenue: d.revenue, orders: d.orders }));
+          setSalesReport(data);
+        })
+        .catch(() => setSalesReport([]));
+    }
+  }, [activeTab, salesPeriod]);
 
   // Fetch wallet data
   useEffect(() => {
@@ -693,6 +822,12 @@ const SellerDashboard = () => {
               Orders
             </button>
             <button
+              onClick={() => setActiveTab('reviews')}
+              className={`py-4 text-sm font-medium ${activeTab === 'reviews' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-blue-600'}`}
+            >
+              Reviews
+            </button>
+            <button
               onClick={() => setActiveTab('coupons')}
               className={`py-4 text-sm font-medium ${activeTab === 'coupons' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-blue-600'}`}
             >
@@ -709,9 +844,53 @@ const SellerDashboard = () => {
         </div>
 
         <div className="p-6">
+          {/* Reviews Tab */}
+          {activeTab === 'reviews' && (
+            <div className="space-y-6">
+              <h3 className="text-lg font-semibold text-gray-800">Product Reviews</h3>
+              <SellerReviews />
+            </div>
+          )}
           {/* Overview Tab */}
           {activeTab === 'overview' && (
             <div className="space-y-6">
+              {/* Status Summary Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-white rounded-lg shadow-md p-6">
+                  <div className="flex items-center">
+                    <div className="p-3 rounded-full bg-yellow-100 text-yellow-600">
+                      <FaChartLine className="text-xl" />
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-gray-600">Pending</p>
+                      <p className="text-2xl font-bold text-gray-800">{statusSummary.pending || 0}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-white rounded-lg shadow-md p-6">
+                  <div className="flex items-center">
+                    <div className="p-3 rounded-full bg-blue-100 text-blue-600">
+                      <FaBox className="text-xl" />
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-gray-600">Shipped</p>
+                      <p className="text-2xl font-bold text-gray-800">{statusSummary.shipped || 0}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-white rounded-lg shadow-md p-6">
+                  <div className="flex items-center">
+                    <div className="p-3 rounded-full bg-green-100 text-green-600">
+                      <FaDollarSign className="text-xl" />
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-gray-600">Delivered</p>
+                      <p className="text-2xl font-bold text-gray-800">{statusSummary.delivered || 0}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* Recent Activity: show last few order events */}
               <div>
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">Recent Activity</h3>
@@ -731,6 +910,36 @@ const SellerDashboard = () => {
                   <p className="text-gray-600">No recent activity to display</p>
                   )}
                 </div>
+              </div>
+
+              {/* Sales Overview */}
+              <div className="bg-white rounded-lg shadow-md p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-lg font-semibold">Sales Overview</h3>
+                  <select
+                    value={salesPeriod}
+                    onChange={e => setSalesPeriod(e.target.value)}
+                    className="border border-gray-300 text-sm rounded px-2 py-1"
+                  >
+                    <option value="daily">Daily</option>
+                    <option value="monthly">Monthly</option>
+                    <option value="yearly">Yearly</option>
+                  </select>
+                </div>
+                <div style={{ width: '100%', height: 260 }}>
+                  <ResponsiveContainer>
+                    <LineChart data={salesReport} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <Tooltip />
+                      <Line type="monotone" dataKey="revenue" stroke="#2563eb" strokeWidth={2} dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+                {Array.isArray(salesReport) && salesReport.length === 0 && (
+                  <p className="text-center text-sm text-gray-500 mt-2">No sales data yet.</p>
+                )}
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -1050,6 +1259,24 @@ const SellerDashboard = () => {
                             <button className="text-blue-600 hover:text-blue-800" onClick={() => handleViewOrder(order)} title="View">
                               <FaEye />
                             </button>
+                            {/* Invoice - always available */}
+                            <button
+                              className="px-2 py-1 bg-gray-700 text-white rounded text-xs hover:bg-gray-800"
+                              onClick={async () => {
+                                try {
+                                  const res = await orderAPI.getInvoice(order._id);
+                                  const contentType = res.headers['content-type'] || 'application/pdf';
+                                  const blob = new Blob([res.data], { type: contentType });
+                                  const url = window.URL.createObjectURL(blob);
+                                  window.open(url, '_blank');
+                                } catch (e) {
+                                  alert(e.response?.data?.message || 'Failed to fetch invoice');
+                                }
+                              }}
+                              title="Download/Print Invoice"
+                            >
+                              Invoice
+                            </button>
                             {/* Ship / Tracking / Label in Actions */}
                             {!order.shipment?.shipmentId ? (
                               <button
@@ -1064,11 +1291,28 @@ const SellerDashboard = () => {
                               </button>
                             ) : (
                               <>
-                            <button
+                                {/* Invoice */}
+                                <button
+                                  className="px-2 py-1 bg-gray-700 text-white rounded text-xs hover:bg-gray-800"
+                                  onClick={async () => {
+                                    try {
+                                      const res = await orderAPI.getInvoice(order._id);
+                                      const blob = new Blob([res.data], { type: res.headers['content-type'] || 'application/pdf' });
+                                      const url = window.URL.createObjectURL(blob);
+                                      window.open(url, '_blank');
+                                    } catch (e) {
+                                      alert(e.response?.data?.message || 'Failed to fetch invoice');
+                                    }
+                                  }}
+                                  title="Download/Print Invoice"
+                                >
+                                  Invoice
+                                </button>
+                                <button
                                   className="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700"
                                   onClick={() => {
                                     const url = order.shipment?.trackingUrl || order.trackingUrl;
-                                    if (url) window.open(url, '_blank');
+                                      if (url) window.open(url, '_blank');
                                   }}
                                   title="Track"
                                 >
@@ -1098,9 +1342,9 @@ const SellerDashboard = () => {
                                 onClick={async () => { setSelectedOrder(order); await handleCancelShipment(); }}
                                 disabled={shipLoading}
                                 title="Cancel Shipment"
-                              >
-                                Cancel
-                              </button>
+                                >
+                                  Cancel
+                                </button>
                             )}
                               </>
                             )}
@@ -1182,57 +1426,93 @@ const SellerDashboard = () => {
                     <div className="text-right font-bold text-lg">Total: {formatINR(selectedOrder.total || selectedOrder.totalPrice)}</div>
 
                     {/* Shipping & Tracking (RapidShyp) */}
-                    {selectedOrder.shipment && (
-                      <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                        <h3 className="text-sm font-semibold text-gray-800 mb-2">Shipping & Tracking</h3>
-                        <div className="space-y-2 text-sm">
-                          {selectedOrder.shipment?.courier && (
-                            <div>
-                              <span className="text-gray-600">Courier Partner:</span>
-                              <span className="ml-2 font-medium">{selectedOrder.shipment.courier}</span>
-                            </div>
-                          )}
-                          {selectedOrder.shipment?.awb && (
-                            <div>
-                              <span className="text-gray-600">AWB Number:</span>
-                              <span className="ml-2 font-mono text-blue-600">{selectedOrder.shipment.awb}</span>
-                            </div>
-                          )}
-                          {selectedOrder.shipment?.trackingUrl && (
-                            <div>
-                              <span className="text-gray-600">Tracking:</span>
-                              <a href={selectedOrder.shipment.trackingUrl} target="_blank" rel="noreferrer" className="ml-2 text-blue-600 underline hover:text-blue-800">Open Tracking →</a>
-                            </div>
-                          )}
-                          {selectedOrder.shipment?.status && (
-                            <div>
-                              <span className="text-gray-600">Status:</span>
-                              <span className={`ml-2 px-2 py-1 rounded text-xs font-medium inline-block ${
-                                selectedOrder.shipment.status === 'DEL' || selectedOrder.shipment.status === 'delivered' ? 'bg-green-100 text-green-700' :
-                                selectedOrder.shipment.status === 'RTO' || selectedOrder.shipment.isReturning ? 'bg-orange-100 text-orange-700' :
-                                selectedOrder.shipment.status === 'CAN' || selectedOrder.shipment.status === 'cancelled' ? 'bg-red-100 text-red-700' :
-                                'bg-blue-100 text-blue-700'
-                              }`}>{selectedOrder.shipment.statusDescription || selectedOrder.shipment.status}</span>
-                            </div>
-                          )}
-                          {selectedOrder.estimatedDelivery && (
-                            <div>
-                              <span className="text-gray-600">Estimated Delivery:</span>
-                              <span className="ml-2 font-medium">{new Date(selectedOrder.estimatedDelivery).toLocaleDateString()}</span>
-                            </div>
-                          )}
-                          {selectedOrder.deliveredAt && (
-                            <div>
-                              <span className="text-gray-600">Delivered On:</span>
-                              <span className="ml-2 font-medium text-green-600">{new Date(selectedOrder.deliveredAt).toLocaleDateString()}</span>
-                            </div>
-                          )}
-                          {selectedOrder.shipment?.isReturning && (
-                            <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded text-xs text-orange-700">⚠️ Return to Origin</div>
-                          )}
+                    {selectedOrder.shipment && (() => {
+                      const s = selectedOrder.shipment || {};
+                      const primaryTrack = s.trackingUrl || (s.awb ? `https://track.rapidshyp.com/?awb=${encodeURIComponent(s.awb)}` : '');
+                      const reverseTrack = s.rtoAwb ? `https://track.rapidshyp.com/?awb=${encodeURIComponent(s.rtoAwb)}` : '';
+                      return (
+                        <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                          <h3 className="text-sm font-semibold text-gray-800 mb-2">Shipping & Tracking</h3>
+                          <div className="space-y-2 text-sm">
+                            {s.courier && (
+                              <div>
+                                <span className="text-gray-600">Courier Partner:</span>
+                                <span className="ml-2 font-medium">{s.courier}</span>
+                  </div>
+                            )}
+                            {s.awb && (
+                              <div>
+                                <span className="text-gray-600">AWB Number:</span>
+                                <span className="ml-2 font-mono text-blue-600">{s.awb}</span>
+                              </div>
+                            )}
+                            {primaryTrack && (
+                              <div>
+                                <span className="text-gray-600">Tracking:</span>
+                                <a href={primaryTrack} target="_blank" rel="noreferrer" className="ml-2 text-blue-600 underline hover:text-blue-800">Open Tracking →</a>
+                              </div>
+                            )}
+                            {s.labelUrl && (
+                              <div>
+                                <span className="text-gray-600">Label:</span>
+                                <a href={s.labelUrl} target="_blank" rel="noreferrer" className="ml-2 text-indigo-600 underline hover:text-indigo-800">Download Label →</a>
+                              </div>
+                            )}
+                            {s.status && (
+                              <div>
+                                <span className="text-gray-600">Shipment Status:</span>
+                                <span className={`ml-2 px-2 py-1 rounded text-xs font-medium inline-block ${
+                                  s.status === 'DEL' || s.status === 'delivered' ? 'bg-green-100 text-green-700' :
+                                  s.status === 'RTO' || s.status === 'RTO_REQ' || s.status === 'RTO_INT' || s.status === 'RTO_RAD' || s.status === 'RTO_OFD' || s.status === 'RTO_DEL' || s.status === 'RTO_UND' || s.status === 'rto' || s.isReturning ? 'bg-orange-100 text-orange-700' :
+                                  s.status === 'CAN' || s.status === 'cancelled' ? 'bg-red-100 text-red-700' :
+                                  s.status === 'INT' || s.status === 'SPD' || s.status === 'OFD' || s.status === 'shipped' ? 'bg-blue-100 text-blue-700' :
+                                  'bg-gray-100 text-gray-700'
+                                }`}>{s.statusDescription || s.status}</span>
+                              </div>
+                            )}
+                            {selectedOrder.estimatedDelivery && (
+                              <div>
+                                <span className="text-gray-600">Estimated Delivery:</span>
+                                <span className="ml-2 font-medium">{new Date(selectedOrder.estimatedDelivery).toLocaleDateString()}</span>
+                              </div>
+                            )}
+                            {selectedOrder.deliveredAt && (
+                              <div>
+                                <span className="text-gray-600">Delivered On:</span>
+                                <span className="ml-2 font-medium text-green-600">{new Date(selectedOrder.deliveredAt).toLocaleDateString()}</span>
+                              </div>
+                            )}
+                            {(s.isReturning || s.rtoAwb) && (
+                              <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded">
+                                <div className="text-xs text-orange-700 font-medium">Reverse Pickup / RTO</div>
+                                {s.rtoAwb && (
+                                  <div className="text-xs mt-1">
+                                    <span className="text-gray-600">Reverse AWB:</span>
+                                    <span className="ml-2 font-mono">{s.rtoAwb}</span>
+                                    {reverseTrack && (
+                                      <a href={reverseTrack} target="_blank" rel="noreferrer" className="ml-3 text-blue-600 underline">Track Reverse →</a>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            {Array.isArray(s.events) && s.events.length > 0 && (
+                              <div className="mt-2">
+                                <div className="text-xs font-semibold text-gray-700 mb-1">Shipment Events</div>
+                                <ul className="space-y-1">
+                                  {s.events.slice(-6).reverse().map((ev, i) => (
+                                    <li key={i} className="text-xs text-gray-700 flex items-start gap-2">
+                                      <span className="text-gray-500 min-w-[110px]">{ev.at ? new Date(ev.at).toLocaleString() : ''}</span>
+                                      <span className="font-medium capitalize">{(ev.type || '').replace(/_/g, ' ') || 'update'}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     {/* Shipping Actions removed from modal per request */}
                   </div>
@@ -1248,6 +1528,7 @@ const SellerDashboard = () => {
                       <tr className="border-b border-gray-200">
                         <th className="text-left py-3 px-4 font-medium text-gray-700">Request</th>
                         <th className="text-left py-3 px-4 font-medium text-gray-700">Order</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-700">Customer</th>
                         <th className="text-left py-3 px-4 font-medium text-gray-700">Type</th>
                         <th className="text-left py-3 px-4 font-medium text-gray-700">Reason</th>
                         <th className="text-left py-3 px-4 font-medium text-gray-700">Status</th>
@@ -1256,21 +1537,22 @@ const SellerDashboard = () => {
                     </thead>
                     <tbody>
                       {returnsForSeller.length === 0 ? (
-                        <tr><td colSpan="5" className="text-center py-6 text-gray-500">No return/replacement requests yet</td></tr>
+                        <tr><td colSpan="7" className="text-center py-6 text-gray-500">No return/replacement requests yet</td></tr>
                       ) : (
                         returnsForSeller.map(r => (
                           <tr key={r._id} className="border-b border-gray-100 hover:bg-gray-50">
                             <td className="py-3 px-4 font-mono">{r._id.slice(-6)}</td>
                             <td className="py-3 px-4">#{r.order?.orderNumber || r.order?._id?.slice(-6) || '-'}</td>
+                            <td className="py-3 px-4">{r.user?.name || r.order?.user?.name || r.user?.email || '-'}</td>
                             <td className="py-3 px-4 capitalize">{r.type}</td>
                             <td className="py-3 px-4">{r.reasonCategory}</td>
                             <td className="py-3 px-4">{r.status}</td>
                             <td className="py-3 px-4">
                               <div className="flex items-center gap-2">
-                                <button
-                                  className="px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded hover:bg-gray-200"
-                                  onClick={() => setReturnDetailsModal({ open: true, req: r })}
-                                >View</button>
+                              <button
+                                className="px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded hover:bg-gray-200"
+                                onClick={() => setReturnDetailsModal({ open: true, req: r })}
+                              >View</button>
                                 {r.status === 'approved' && !r.reverseAwb && r.order?._id && (
                                   <button
                                     className="px-2 py-1 text-xs bg-yellow-600 text-white rounded hover:bg-yellow-700 disabled:opacity-50"
@@ -1296,6 +1578,7 @@ const SellerDashboard = () => {
                       <div><span className="text-gray-500">Request:</span> <span className="font-mono">{returnDetailsModal.req._id}</span></div>
                       <div><span className="text-gray-500">Status:</span> <span className="capitalize">{returnDetailsModal.req.status}</span></div>
                       <div><span className="text-gray-500">Order:</span> #{returnDetailsModal.req.order?.orderNumber || returnDetailsModal.req.order?._id}</div>
+                      <div><span className="text-gray-500">Customer:</span> {returnDetailsModal.req.user?.name || returnDetailsModal.req.order?.user?.name || returnDetailsModal.req.user?.email || '-'}</div>
                       <div><span className="text-gray-500">Type:</span> <span className="capitalize">{returnDetailsModal.req.type}</span></div>
                       <div className="md:col-span-2"><span className="text-gray-500">Reason:</span> {returnDetailsModal.req.reasonCategory}{returnDetailsModal.req.reasonText ? ` - ${returnDetailsModal.req.reasonText}` : ''}</div>
                     </div>

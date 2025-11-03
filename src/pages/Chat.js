@@ -293,7 +293,8 @@ const Chat = () => {
   // Start new conversation
   const startConversation = async (userId) => {
     if (!user || !user._id) return;
-          const res = await axiosInstance.post('/chat/conversations', { userId });
+          // Here userId is actually the Seller._id from the URL; send it as sellerId only
+          const res = await axiosInstance.post('/chat/conversations', { sellerId: userId });
     setConversations((prev) => {
       if (prev.find((c) => c._id === res.data._id)) return prev;
       return [res.data, ...prev];

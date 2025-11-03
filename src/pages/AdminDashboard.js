@@ -109,6 +109,47 @@ const AdminDashboard = () => {
   const [eventLoading, setEventLoading] = useState(false);
   const [eventError, setEventError] = useState('');
 
+  // Helpers for event banner
+  const toDateTimeLocal = (d) => {
+    try {
+      const dt = new Date(d);
+      // Return yyyy-MM-ddTHH:mm (drop seconds)
+      return new Date(dt.getTime() - dt.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    } catch (e) { return ''; }
+  };
+
+  const handleEditEventBanner = (banner) => {
+    setEventForm({
+      title: banner?.title || '',
+      description: banner?.description || '',
+      endDate: banner?.endDate ? toDateTimeLocal(banner.endDate) : '',
+      product: (banner?.product && (banner.product._id || banner.product)) || ''
+    });
+    setEventEditId(banner?._id || '');
+    setActiveTab('event-banner');
+    try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) {}
+  };
+
+  const handleDeleteEventBanner = async (id) => {
+    setEventError('');
+    setEventLoading(true);
+    try {
+      if (id) {
+        await productAPI.deleteEventBannerById(id);
+      } else {
+        await productAPI.deleteEventBanner();
+      }
+      await fetchEventBanners();
+      toast.success('Event banner deleted');
+    } catch (error) {
+      const msg = error.response?.data?.message || 'Failed to delete event banner';
+      setEventError(msg);
+      toast.error(msg);
+    } finally {
+      setEventLoading(false);
+    }
+  };
+
 
   // Fetch returns when tab active
   useEffect(() => {
@@ -233,9 +274,11 @@ const AdminDashboard = () => {
   const fetchEventBanners = async () => {
     try {
       const response = await productAPI.getEventBanners();
-      setEventBanners(response.data);
+      const data = response.data;
+      setEventBanners(Array.isArray(data) ? data : (data ? [data] : []));
     } catch (error) {
       console.error('Error fetching event banners:', error);
+      setEventBanners([]);
     }
   };
 
@@ -877,13 +920,20 @@ const AdminDashboard = () => {
     setEventForm({ ...eventForm, [name]: value });
   };
 
+  const [eventEditId, setEventEditId] = useState('');
+
   const handleEventFormSubmit = async (e) => {
     e.preventDefault();
     setEventError('');
     setEventLoading(true);
     try {
-      await productAPI.createEventBanner(eventForm);
+      if (eventEditId) {
+        await productAPI.updateEventBanner(eventEditId, eventForm);
+      } else {
+        await productAPI.createOrUpdateEventBanner(eventForm);
+      }
       setEventForm({ title: '', description: '', endDate: '', product: '' });
+      setEventEditId('');
       fetchEventBanners();
     } catch (error) {
       setEventError(error.response?.data?.message || 'Failed to create event banner');
@@ -1992,42 +2042,93 @@ const AdminDashboard = () => {
                     <div className="text-right font-bold text-lg">Total: {formatINR(selectedOrder.totalPrice)}</div>
 
                     {/* Shipping & Tracking (RapidShyp) for admin view */}
-                    {selectedOrder.shipment && (
-                      <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                        <h3 className="text-sm font-semibold text-gray-800 mb-2">Shipping & Tracking</h3>
-                        <div className="space-y-2 text-sm">
-                          {selectedOrder.shipment?.courier && (
-                            <div><span className="text-gray-600">Courier:</span><span className="ml-2 font-medium">{selectedOrder.shipment.courier}</span></div>
-                          )}
-                          {selectedOrder.shipment?.awb && (
-                            <div><span className="text-gray-600">AWB:</span><span className="ml-2 font-mono text-blue-600">{selectedOrder.shipment.awb}</span></div>
-                          )}
-                          {selectedOrder.shipment?.trackingUrl && (
-                            <div><span className="text-gray-600">Tracking:</span><a href={selectedOrder.shipment.trackingUrl} target="_blank" rel="noreferrer" className="ml-2 text-blue-600 underline">Open Tracking →</a></div>
-                          )}
-                          {selectedOrder.shipment?.status && (
-                            <div>
-                              <span className="text-gray-600">Status:</span>
-                              <span className={`ml-2 px-2 py-1 rounded text-xs font-medium inline-block ${
-                                selectedOrder.shipment.status === 'DEL' || selectedOrder.shipment.status === 'delivered' ? 'bg-green-100 text-green-700' :
-                                selectedOrder.shipment.status === 'RTO' || selectedOrder.shipment.isReturning ? 'bg-orange-100 text-orange-700' :
-                                selectedOrder.shipment.status === 'CAN' || selectedOrder.shipment.status === 'cancelled' ? 'bg-red-100 text-red-700' :
-                                'bg-blue-100 text-blue-700'
-                              }`}>{selectedOrder.shipment.statusDescription || selectedOrder.shipment.status}</span>
-                            </div>
-                          )}
-                          {selectedOrder.estimatedDelivery && (
-                            <div><span className="text-gray-600">Estimated Delivery:</span><span className="ml-2 font-medium">{new Date(selectedOrder.estimatedDelivery).toLocaleDateString()}</span></div>
-                          )}
-                          {selectedOrder.deliveredAt && (
-                            <div><span className="text-gray-600">Delivered On:</span><span className="ml-2 font-medium text-green-600">{new Date(selectedOrder.deliveredAt).toLocaleDateString()}</span></div>
-                          )}
-                          {selectedOrder.shipment?.isReturning && (
-                            <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded text-xs text-orange-700">⚠️ Return to Origin</div>
-                          )}
+                    {selectedOrder.shipment && (() => {
+                      const s = selectedOrder.shipment || {};
+                      const primaryTrack = s.trackingUrl || (s.awb ? `https://track.rapidshyp.com/?awb=${encodeURIComponent(s.awb)}` : '');
+                      const reverseTrack = s.rtoAwb ? `https://track.rapidshyp.com/?awb=${encodeURIComponent(s.rtoAwb)}` : '';
+                      return (
+                        <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                          <h3 className="text-sm font-semibold text-gray-800 mb-2">Shipping & Tracking</h3>
+                          <div className="space-y-2 text-sm">
+                            {s.courier && (
+                              <div><span className="text-gray-600">Courier:</span><span className="ml-2 font-medium">{s.courier}</span></div>
+                            )}
+                            {s.awb && (
+                              <div><span className="text-gray-600">AWB:</span><span className="ml-2 font-mono text-blue-600">{s.awb}</span></div>
+                            )}
+                            {primaryTrack && (
+                              <div><span className="text-gray-600">Tracking:</span><a href={primaryTrack} target="_blank" rel="noreferrer" className="ml-2 text-blue-600 underline">Track Shipment →</a></div>
+                            )}
+                            {s.status && (
+                              <div>
+                                <span className="text-gray-600">Status:</span>
+                                <span className={`ml-2 px-2 py-1 rounded text-xs font-medium inline-block ${
+                                  s.status === 'DEL' || s.status === 'delivered' ? 'bg-green-100 text-green-700' :
+                                  s.status === 'RTO' || s.status === 'RTO_REQ' || s.status === 'RTO_INT' || s.status === 'RTO_RAD' || s.status === 'RTO_OFD' || s.status === 'RTO_DEL' || s.status === 'RTO_UND' || s.status === 'rto' || s.isReturning ? 'bg-orange-100 text-orange-700' :
+                                  s.status === 'CAN' || s.status === 'cancelled' ? 'bg-red-100 text-red-700' :
+                                  s.status === 'INT' || s.status === 'SPD' || s.status === 'OFD' || s.status === 'shipped' ? 'bg-blue-100 text-blue-700' :
+                                  'bg-gray-100 text-gray-700'
+                                }`}>{s.statusDescription || s.status}</span>
+                              </div>
+                            )}
+                            {selectedOrder.estimatedDelivery && (
+                              <div><span className="text-gray-600">Estimated Delivery:</span><span className="ml-2 font-medium">{new Date(selectedOrder.estimatedDelivery).toLocaleDateString()}</span></div>
+                            )}
+                            {selectedOrder.deliveredAt && (
+                              <div><span className="text-gray-600">Delivered On:</span><span className="ml-2 font-medium text-green-600">{new Date(selectedOrder.deliveredAt).toLocaleDateString()}</span></div>
+                            )}
+                            {(s.isReturning || s.rtoAwb) && (
+                              <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded">
+                                <div className="text-xs text-orange-700 font-medium">Reverse Pickup / RTO</div>
+                                {s.rtoAwb && (
+                                  <div className="text-xs mt-1">
+                                    <span className="text-gray-600">Reverse AWB:</span>
+                                    <span className="ml-2 font-mono">{s.rtoAwb}</span>
+                                    {reverseTrack && (
+                                      <a href={reverseTrack} target="_blank" rel="noreferrer" className="ml-3 text-blue-600 underline">Track Reverse →</a>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            {Array.isArray(s.events) && s.events.length > 0 && (
+                              <div className="mt-2">
+                                <div className="text-xs font-semibold text-gray-700 mb-1">Shipment Events</div>
+                                <ul className="space-y-1">
+                                  {s.events.slice(-6).reverse().map((ev, i) => (
+                                    <li key={i} className="text-xs text-gray-700 flex items-start gap-2">
+                                      <span className="text-gray-500 min-w-[110px]">{ev.at ? new Date(ev.at).toLocaleString() : ''}</span>
+                                      <span className="font-medium capitalize">{(ev.type || '').replace(/_/g, ' ') || 'update'}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {Array.isArray(s.events) && s.events.length > 0 && (() => {
+                              const errorEvents = s.events.filter(ev => {
+                                const raw = ev.raw || {};
+                                const msg = (raw.message || raw.remarks || raw.error || '').toString().toLowerCase();
+                                return (ev.type || '').toLowerCase().includes('error') || (msg.includes('error') || msg.includes('failed') || msg.includes('invalid'));
+                              }).slice(-3).reverse();
+                              if (errorEvents.length === 0) return null;
+                              return (
+                                <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded">
+                                  <div className="text-xs font-semibold text-red-700 mb-1">Error Logs (RapidShyp)</div>
+                                  <ul className="space-y-1">
+                                    {errorEvents.map((ev, i) => (
+                                      <li key={i} className="text-xs text-red-800 flex items-start gap-2">
+                                        <span className="text-red-600 min-w-[110px]">{ev.at ? new Date(ev.at).toLocaleString() : ''}</span>
+                                        <span>{ev.raw?.message || ev.raw?.remarks || ev.raw?.error || (ev.type || 'error')}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              );
+                            })()}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
                 </div>
               )}
               </div>
@@ -2144,8 +2245,10 @@ const AdminDashboard = () => {
                   <label className="block font-medium mb-1">Select Product for Banner</label>
                   <select name="product" className="form-input w-full" value={eventForm.product} onChange={handleEventFormChange} required>
                     <option value="">Select a product</option>
-                    {products.filter(p => p.isApproved).map(p => (
-                      <option key={p._id} value={p._id}>{p.name}</option>
+                    {products.map(p => (
+                      <option key={p._id} value={p._id}>
+                        {p.name}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -2158,13 +2261,28 @@ const AdminDashboard = () => {
                 <h4 className="text-md font-semibold mb-4">Active Event Banners</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {eventBanners.map((banner) => (
-                    <div key={banner._id} className="bg-white border rounded-lg p-4">
-                      <h5 className="font-semibold text-gray-800 mb-2">{banner.title}</h5>
-                      <p className="text-sm text-gray-600 mb-2">{banner.description}</p>
-                      <p className="text-xs text-gray-500">Ends: {new Date(banner.endDate).toLocaleString()}</p>
+                    <div key={banner._id || banner.title} className="bg-white border rounded-lg p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h5 className="font-semibold text-gray-800 mb-1">{banner.title}</h5>
+                          <p className="text-sm text-gray-600 mb-2">{banner.description}</p>
+                          <p className="text-xs text-gray-500">Ends: {banner.endDate ? new Date(banner.endDate).toLocaleString() : '-'}</p>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <button
+                            className="px-3 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700"
+                            onClick={() => handleEditEventBanner(banner)}
+                          >Edit</button>
+                          <button
+                            className="px-3 py-1 text-xs rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                            onClick={() => { if (window.confirm('Delete this event banner?')) handleDeleteEventBanner(banner._id || null); }}
+                            disabled={eventLoading}
+                          >Delete</button>
+                        </div>
+                      </div>
                     </div>
                   ))}
-                    </div>
+                </div>
                   </div>
             </div>
           )}

@@ -101,6 +101,10 @@ const ProductDetail = ({ product, onAddToCart, onBuyNow, onWishlist, onShare }) 
     }
   };
 
+  const averageFromReviews = reviews && reviews.length > 0
+    ? (reviews.reduce((s, r) => s + (Number(r.rating) || 0), 0) / reviews.length)
+    : (product?.ratings || 0);
+
   return (
     <div className="container mx-auto px-2 sm:px-4 py-8">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
@@ -180,10 +184,10 @@ const ProductDetail = ({ product, onAddToCart, onBuyNow, onWishlist, onShare }) 
           <div className="flex items-center mb-2">
             <div className="flex text-yellow-400 mr-2">
               {[...Array(5)].map((_, i) => (
-                <FaStar key={i} className={i < Math.floor(product.rating || 0) ? 'text-yellow-400' : 'text-gray-300'} />
+                <FaStar key={i} className={i < Math.floor(averageFromReviews || 0) ? 'text-yellow-400' : 'text-gray-300'} />
               ))}
             </div>
-            <span className="text-gray-600 text-sm">{product.rating || 0} ({product.numReviews || 0} reviews)</span>
+            <span className="text-gray-600 text-sm">{Number(averageFromReviews || 0).toFixed(1)} ({(reviews && reviews.length) || product.numReviews || 0} reviews)</span>
           </div>
           <div className="flex items-end gap-3 mb-2">
             <span className="text-3xl font-bold text-blue-600">{formatINR(currentVariantData.price)}</span>
@@ -336,7 +340,18 @@ const ProductDetail = ({ product, onAddToCart, onBuyNow, onWishlist, onShare }) 
                         <button type="button" className="bg-gray-300 text-gray-700 px-3 py-1 rounded" onClick={() => setEditingReview(false)}>Cancel</button>
                       </form>
                     ) : (
-                      <div className="text-gray-700">{safeComment}</div>
+                      <>
+                        <div className="text-gray-700">{safeComment}</div>
+                        {review.sellerReply && review.sellerReply.text && (
+                          <div className="mt-2 ml-4 p-2 rounded border border-green-200 bg-green-50 text-sm text-green-800">
+                            <div className="font-medium mb-1">Vendor Reply</div>
+                            <div>{review.sellerReply.text}</div>
+                            {review.sellerReply.at && (
+                              <div className="text-xs text-green-700 mt-1">{new Date(review.sellerReply.at).toLocaleString()}</div>
+                            )}
+                          </div>
+                        )}
+                      </>
                     )}
                   </li>
                 );

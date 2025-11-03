@@ -143,9 +143,22 @@ const productAPI = {
     return axiosInstance.get('/products/event-banner');
   },
 
+  // Get all active event banners
+  getEventBanners: () => {
+    return axiosInstance.get('/products/event-banners');
+  },
+
   // Delete event banner (admin only)
   deleteEventBanner: () => {
     return axiosInstance.delete('/products/event-banner');
+  },
+  deleteEventBannerById: (id) => {
+    return axiosInstance.delete(`/products/event-banner/${id}`);
+  },
+
+  // Update event banner by id
+  updateEventBanner: (id, data) => {
+    return axiosInstance.put(`/products/event-banner/${id}`, data);
   },
 
   // Get discover products

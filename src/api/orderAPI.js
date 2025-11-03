@@ -34,6 +34,11 @@ const orderAPI = {
     return axiosInstance.get(`/orders/${id}`);
   },
 
+  // Get invoice (PDF/HTML)
+  getInvoice: (id) => {
+    return axiosInstance.get(`/orders/${id}/invoice`, { responseType: 'blob' });
+  },
+
   // Update order status
   updateOrderStatus: (id, status) => {
     return axiosInstance.put(`/orders/${id}/status`, { status });

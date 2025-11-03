@@ -31,6 +31,11 @@ const sellerAPI = {
 
   // Seller stats
   getStats: () => axiosInstance.get('/sellers/stats'),
+  getSalesReport: (params = {}) => axiosInstance.get('/sellers/reports/sales', { params }),
+  getOrderStatusSummary: () => axiosInstance.get('/sellers/orders/status-summary'),
+  // Reviews
+  getMyReviews: () => axiosInstance.get('/sellers/reviews'),
+  replyToReview: (productId, reviewId, text) => axiosInstance.post(`/sellers/reviews/${productId}/${reviewId}/reply`, { text }),
 };
 
 export default sellerAPI; 

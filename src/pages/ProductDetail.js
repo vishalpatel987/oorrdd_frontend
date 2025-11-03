@@ -98,13 +98,13 @@ const ProductDetailPage = () => {
 
   return (
     <>
-      <ProductDetail
-        product={product}
-        onAddToCart={handleAddToCart}
-        onBuyNow={handleBuyNow}
-        onWishlist={handleWishlist}
-        onShare={handleShare}
-      />
+    <ProductDetail
+      product={product}
+      onAddToCart={handleAddToCart}
+      onBuyNow={handleBuyNow}
+      onWishlist={handleWishlist}
+      onShare={handleShare}
+    />
       <ShareModal
         isOpen={showShareModal}
         onClose={() => setShowShareModal(false)}

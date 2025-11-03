@@ -29,6 +29,7 @@ const Profile = () => {
   const [ordersError, setOrdersError] = useState('');
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showOrderModal, setShowOrderModal] = useState(false);
+  const [awbCopied, setAwbCopied] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [cancelError, setCancelError] = useState('');
   const [showCancelReasonModal, setShowCancelReasonModal] = useState(false);
@@ -456,74 +457,108 @@ const Profile = () => {
                   <div className="text-right font-bold text-lg mb-4">Total: {formatINR(selectedOrder.total || selectedOrder.totalPrice)}</div>
                   
                   {/* Shipping Details */}
-                  {selectedOrder.shipment && (
-                    <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                      <h3 className="text-sm font-semibold text-gray-800 mb-2">Shipping & Tracking</h3>
-                      <div className="space-y-2 text-sm">
-                        {selectedOrder.shipment?.courier && (
-                          <div>
-                            <span className="text-gray-600">Courier Partner:</span>
-                            <span className="ml-2 font-medium">{selectedOrder.shipment.courier}</span>
-                          </div>
-                        )}
-                        {selectedOrder.shipment?.awb && (
-                          <div>
-                            <span className="text-gray-600">AWB Number:</span>
-                            <span className="ml-2 font-mono text-blue-600">{selectedOrder.shipment.awb}</span>
-                          </div>
-                        )}
-                        {selectedOrder.shipment?.trackingUrl && (
-                          <div>
-                            <span className="text-gray-600">Tracking:</span>
-                            <a 
-                              href={selectedOrder.shipment.trackingUrl} 
-                              target="_blank" 
-                              rel="noreferrer" 
-                              className="ml-2 text-blue-600 underline hover:text-blue-800"
-                            >
-                              Track Your Order →
-                            </a>
-                          </div>
-                        )}
-                        {selectedOrder.shipment?.status && (
-                          <div>
-                            <span className="text-gray-600">Shipment Status:</span>
-                            <div className="ml-2 flex flex-col gap-1">
-                              <span className={`px-2 py-1 rounded text-xs font-medium inline-block ${
-                                selectedOrder.shipment.status === 'DEL' || selectedOrder.shipment.status === 'delivered' ? 'bg-green-100 text-green-700' :
-                                selectedOrder.shipment.status === 'RTO' || selectedOrder.shipment.status === 'RTO_REQ' || selectedOrder.shipment.status === 'RTO_INT' || selectedOrder.shipment.status === 'RTO_RAD' || selectedOrder.shipment.status === 'RTO_OFD' || selectedOrder.shipment.status === 'RTO_DEL' || selectedOrder.shipment.status === 'RTO_UND' || selectedOrder.shipment.status === 'rto' || selectedOrder.shipment.isReturning ? 'bg-orange-100 text-orange-700' :
-                                selectedOrder.shipment.status === 'CAN' || selectedOrder.shipment.status === 'cancelled' ? 'bg-red-100 text-red-700' :
-                                selectedOrder.shipment.status === 'INT' || selectedOrder.shipment.status === 'SPD' || selectedOrder.shipment.status === 'OFD' || selectedOrder.shipment.status === 'shipped' ? 'bg-blue-100 text-blue-700' :
-                                'bg-gray-100 text-gray-700'
-                              }`}>
-                                {selectedOrder.shipment.statusDescription || selectedOrder.shipment.status}
-                              </span>
-                              {selectedOrder.shipment.isReturning && (
-                                <span className="text-xs text-orange-600 font-medium">⚠️ Return to Origin</span>
+                  {selectedOrder.shipment && (() => {
+                    const s = selectedOrder.shipment || {};
+                    const primaryTrack = s.trackingUrl || (s.awb ? `https://track.rapidshyp.com/?awb=${encodeURIComponent(s.awb)}` : '');
+                    const reverseTrack = s.rtoAwb ? `https://track.rapidshyp.com/?awb=${encodeURIComponent(s.rtoAwb)}` : '';
+                    return (
+                      <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                        <h3 className="text-sm font-semibold text-gray-800 mb-2">Shipping & Tracking</h3>
+                        <div className="space-y-2 text-sm">
+                          {s.courier && (
+                            <div>
+                              <span className="text-gray-600">Courier Partner:</span>
+                              <span className="ml-2 font-medium">{s.courier}</span>
+                            </div>
+                          )}
+                          {s.awb && (
+                            <div className="flex items-center flex-wrap gap-2">
+                              <div>
+                                <span className="text-gray-600">AWB Number:</span>
+                                <span className="ml-2 font-mono text-blue-600 select-all">{s.awb}</span>
+                              </div>
+                              <button
+                                className="px-2 py-0.5 text-xs bg-gray-200 hover:bg-gray-300 rounded"
+                                onClick={async () => {
+                                  try { await navigator.clipboard.writeText(String(s.awb)); setAwbCopied(true); setTimeout(() => setAwbCopied(false), 1500); } catch (e) {}
+                                }}
+                                title="Copy AWB"
+                              >{awbCopied ? 'Copied' : 'Copy'}</button>
+                            </div>
+                          )}
+                          {primaryTrack && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-gray-600">Tracking:</span>
+                              <a href={primaryTrack} target="_blank" rel="noreferrer" className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700">Track Shipment</a>
+                            </div>
+                          )}
+                          {s.status && (
+                            <div>
+                              <span className="text-gray-600">Shipment Status:</span>
+                              <div className="ml-2 flex flex-col gap-1">
+                                <span className={`px-2 py-1 rounded text-xs font-medium inline-block ${
+                                  s.status === 'DEL' || s.status === 'delivered' ? 'bg-green-100 text-green-700' :
+                                  s.status === 'RTO' || s.status === 'RTO_REQ' || s.status === 'RTO_INT' || s.status === 'RTO_RAD' || s.status === 'RTO_OFD' || s.status === 'RTO_DEL' || s.status === 'RTO_UND' || s.status === 'rto' || s.isReturning ? 'bg-orange-100 text-orange-700' :
+                                  s.status === 'CAN' || s.status === 'cancelled' ? 'bg-red-100 text-red-700' :
+                                  s.status === 'INT' || s.status === 'SPD' || s.status === 'OFD' || s.status === 'shipped' ? 'bg-blue-100 text-blue-700' :
+                                  'bg-gray-100 text-gray-700'
+                                }`}>
+                                  {s.statusDescription || s.status}
+                                </span>
+                                {s.isReturning && (
+                                  <span className="text-xs text-orange-600 font-medium">⚠️ Return to Origin</span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                          {selectedOrder.estimatedDelivery && (
+                            <div>
+                              <span className="text-gray-600">Estimated Delivery:</span>
+                              <span className="ml-2 font-medium">{new Date(selectedOrder.estimatedDelivery).toLocaleDateString()}</span>
+                            </div>
+                          )}
+                          {selectedOrder.deliveredAt && (
+                            <div>
+                              <span className="text-gray-600">Delivered On:</span>
+                              <span className="ml-2 font-medium text-green-600">{new Date(selectedOrder.deliveredAt).toLocaleDateString()}</span>
+                            </div>
+                          )}
+                          {(s.isReturning || s.rtoAwb) && (
+                            <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded">
+                              <div className="text-xs text-orange-700 font-medium">Reverse Pickup / RTO</div>
+                              {s.rtoAwb && (
+                                <div className="text-xs mt-1">
+                                  <span className="text-gray-600">Reverse AWB:</span>
+                                  <span className="ml-2 font-mono">{s.rtoAwb}</span>
+                                  {reverseTrack && (
+                                    <a
+                                      href={reverseTrack}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="ml-3 text-blue-600 underline"
+                                    >Track Reverse →</a>
+                                  )}
+                                </div>
                               )}
                             </div>
-                          </div>
-                        )}
-                        {selectedOrder.estimatedDelivery && (
-                          <div>
-                            <span className="text-gray-600">Estimated Delivery:</span>
-                            <span className="ml-2 font-medium">{new Date(selectedOrder.estimatedDelivery).toLocaleDateString()}</span>
-                          </div>
-                        )}
-                        {selectedOrder.deliveredAt && (
-                          <div>
-                            <span className="text-gray-600">Delivered On:</span>
-                            <span className="ml-2 font-medium text-green-600">{new Date(selectedOrder.deliveredAt).toLocaleDateString()}</span>
-                          </div>
-                        )}
-                        {selectedOrder.shipment?.isReturning && (
-                          <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded text-xs text-orange-700">
-                            ⚠️ This order has been returned to the seller
-                          </div>
-                        )}
+                          )}
+                          {Array.isArray(s.events) && s.events.length > 0 && (
+                            <div className="mt-2">
+                              <div className="text-xs font-semibold text-gray-700 mb-1">Shipment Events</div>
+                              <ul className="space-y-1">
+                                {s.events.slice(-6).reverse().map((ev, i) => (
+                                  <li key={i} className="text-xs text-gray-700 flex items-start gap-2">
+                                    <span className="text-gray-500 min-w-[110px]">{ev.at ? new Date(ev.at).toLocaleString() : ''}</span>
+                                    <span className="font-medium capitalize">{(ev.type || '').replace(/_/g, ' ') || 'update'}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {/* Refund/Cancellation status hints for the user */}
                   {selectedOrder.cancellationRequested && selectedOrder.orderStatus !== 'cancelled' && (
