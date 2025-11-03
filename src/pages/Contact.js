@@ -39,7 +39,23 @@ const Contact = () => {
       }
     } catch (error) {
       console.error('Contact form error:', error);
-      const errorMessage = error.response?.data?.message || error.response?.data?.error || 'Failed to send message. Please try again.';
+      
+      // Better error handling
+      let errorMessage = 'Failed to send message. Please try again.';
+      
+      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        errorMessage = 'Request timeout. The server is taking too long to respond. Please try again.';
+      } else if (error.response) {
+        // Server responded with error
+        errorMessage = error.response.data?.message || error.response.data?.error || 'Failed to send message. Please try again.';
+      } else if (error.request) {
+        // Request made but no response
+        errorMessage = 'No response from server. Please check your internet connection and try again.';
+      } else {
+        // Something else happened
+        errorMessage = error.message || 'Failed to send message. Please try again.';
+      }
+      
       toast.error(errorMessage);
     } finally {
       setLoading(false);

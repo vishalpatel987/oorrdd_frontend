@@ -1,10 +1,25 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+// IMPORTANT: Ensure API_BASE_URL points to backend server (port 5000 locally)
+// In development, always use localhost:5000 (backend server)
+// In production, use REACT_APP_API_URL or default to production backend
+let API_BASE_URL;
+if (process.env.NODE_ENV === 'development') {
+  // Force localhost:5000 in development (override any incorrect env vars)
+  API_BASE_URL = 'http://localhost:5000/api';
+  console.log('🔍 Development mode - Using:', API_BASE_URL);
+  if (process.env.REACT_APP_API_URL && process.env.REACT_APP_API_URL !== API_BASE_URL) {
+    console.warn('⚠️ WARNING: REACT_APP_API_URL is set but ignored in development:', process.env.REACT_APP_API_URL);
+  }
+} else {
+  // Production: use env var or default to production backend
+  API_BASE_URL = process.env.REACT_APP_API_URL || 'https://oorrdd-backend.onrender.com/api';
+  console.log('🔍 Production mode - Using:', API_BASE_URL);
+}
 
 const axiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000, // 10 seconds
+  timeout: 30000, // 30 seconds (increased for Render free tier)
   // headers: {
   //   'Content-Type': 'application/json',
   // },
@@ -17,6 +32,13 @@ axiosInstance.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // Debug: Log the full URL being requested
+    if (process.env.NODE_ENV === 'development') {
+      const fullUrl = `${config.baseURL}${config.url}`;
+      console.log(`🌐 Making request to: ${config.method?.toUpperCase()} ${fullUrl}`);
+    }
+    
     return config;
   },
   (error) => {

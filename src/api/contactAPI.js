@@ -3,7 +3,11 @@ import axiosInstance from './axiosConfig';
 const contactAPI = {
   // Submit contact form
   submitContact: (formData) => {
-    return axiosInstance.post('/contact', formData);
+    // Response is sent immediately from backend, so shorter timeout is fine
+    // But keep it at 15 seconds to be safe
+    return axiosInstance.post('/contact', formData, {
+      timeout: 15000 // 15 seconds (backend responds immediately, but network can be slow)
+    });
   },
 
   // Admin: Get all contacts (requires admin auth)
