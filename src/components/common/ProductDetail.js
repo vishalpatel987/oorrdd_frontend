@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FaStar, FaShoppingCart, FaHeart, FaShare, FaTruck, FaShieldAlt, FaUndo, FaTag, FaSyncAlt, FaCheckCircle } from 'react-icons/fa';
+import { FaStar, FaShoppingCart, FaHeart, FaShare, FaTruck, FaShieldAlt, FaUndo, FaTag, FaSyncAlt, FaCheckCircle, FaArrowLeft } from 'react-icons/fa';
 import { formatINR } from '../../utils/formatCurrency';
 import { useSelector } from 'react-redux';
 import productAPI from '../../api/productAPI';
@@ -107,6 +107,34 @@ const ProductDetail = ({ product, onAddToCart, onBuyNow, onWishlist, onShare }) 
 
   return (
     <div className="container mx-auto px-2 sm:px-4 py-8">
+      {/* Back Button - Show only on desktop */}
+      <div className="mb-6 hidden md:block">
+        <button
+          onClick={() => {
+            // Check if we came from products page or use browser history
+            const referrer = document.referrer;
+            if (referrer && (referrer.includes('/products') || referrer.includes('/categories'))) {
+              // Navigate back to previous page
+              if (window.history.length > 1) {
+                window.history.back();
+              } else {
+                navigate('/products');
+              }
+            } else if (window.history.length > 1) {
+              // Use browser history to go back
+              window.history.back();
+            } else {
+              // Fallback: navigate to products page
+              navigate('/products');
+            }
+          }}
+          className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors font-medium"
+        >
+          <FaArrowLeft className="text-sm" />
+          <span>Back</span>
+        </button>
+      </div>
+      
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
         {/* Left: Vertical Image Gallery and Features/Specs */}
         <div className="flex flex-col lg:flex-row gap-6">
