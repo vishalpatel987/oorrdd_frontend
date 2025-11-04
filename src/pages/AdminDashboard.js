@@ -943,6 +943,29 @@ const AdminDashboard = () => {
     setCategoryForm(category ? { ...category, image: null, parentCategory: category.parentCategory || '' } : { name: '', slug: '', description: '', image: null, parentCategory: '' });
     setCategoryModal({ open: true, category });
     setCategoryError('');
+    setCategoryLoading(false);
+  };
+
+  const handleDeleteCategory = async (categoryId, categoryName) => {
+    if (!window.confirm(`Are you sure you want to delete category "${categoryName}"? This action cannot be undone.`)) {
+      return;
+    }
+    
+    setCategoryLoading(true);
+    try {
+      await productAPI.deleteCategory(categoryId);
+      toast.success('Category deleted successfully');
+      await fetchCategories();
+    } catch (error) {
+      console.error('Delete category error:', error);
+      const errorMessage = error.response?.data?.message || 
+                          error.response?.data?.error || 
+                          error.message || 
+                          'Failed to delete category';
+      toast.error(errorMessage);
+    } finally {
+      setCategoryLoading(false);
+    }
   };
 
   const handleCategoryFormChange = (e) => {
@@ -2472,29 +2495,138 @@ const AdminDashboard = () => {
                   </button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="space-y-6">
               {loadingCategories ? (
-                  <div className="col-span-full text-center py-8 text-gray-500">Loading categories...</div>
+                  <div className="text-center py-8 text-gray-500">Loading categories...</div>
                 ) : (
-                  categories.map((category) => (
-                    <div key={category._id} className="bg-white border rounded-lg p-4 hover:shadow-md transition-shadow">
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="font-semibold text-gray-800">{category.name}</h4>
-                        <div className="flex space-x-1">
-                          <button
-                            className="text-blue-600 hover:text-blue-800"
-                            onClick={() => handleOpenCategoryModal(category)}
-                          >
-                            <FaEdit />
-                          </button>
+                  (() => {
+                    // Separate main categories and subcategories
+                    const mainCategories = categories.filter(cat => {
+                      // Check if parentCategory is null, undefined, empty string, or empty object
+                      const parentId = cat.parentCategory?._id || cat.parentCategory;
+                      return !parentId || parentId === null || parentId === '';
+                    });
+                    
+                    const subcategories = categories.filter(cat => {
+                      // Check if parentCategory exists
+                      const parentId = cat.parentCategory?._id || cat.parentCategory;
+                      return parentId && parentId !== null && parentId !== '';
+                    });
+                    
+                    // Group subcategories by parent
+                    const subcategoriesByParent = {};
+                    subcategories.forEach(sub => {
+                      const parentId = sub.parentCategory?._id || sub.parentCategory;
+                      if (parentId) {
+                        if (!subcategoriesByParent[parentId]) {
+                          subcategoriesByParent[parentId] = [];
+                        }
+                        subcategoriesByParent[parentId].push(sub);
+                      }
+                    });
+
+                    return (
+                      <>
+                        {/* Main Categories */}
+                        <div>
+                          <h4 className="text-md font-semibold text-gray-700 mb-4">Main Categories</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {mainCategories.map((category) => (
+                              <div key={category._id} className="bg-white border rounded-lg p-4 hover:shadow-md transition-shadow">
+                                <div className="flex items-center justify-between mb-2">
+                                  <h4 className="font-semibold text-gray-800">{category.name}</h4>
+                                  <div className="flex space-x-1">
+                                    <button
+                                      className="text-blue-600 hover:text-blue-800"
+                                      onClick={() => handleOpenCategoryModal(category)}
+                                      title="Edit Category"
+                                    >
+                                      <FaEdit />
+                                    </button>
+                                    <button
+                                      className="text-red-600 hover:text-red-800"
+                                      onClick={() => handleDeleteCategory(category._id, category.name)}
+                                      disabled={categoryLoading}
+                                      title="Delete Category"
+                                    >
+                                      <FaTrash />
+                                    </button>
+                                  </div>
+                                </div>
+                                <p className="text-sm text-gray-600 mb-2">{category.description}</p>
+                                {category.image && (
+                                  <img src={category.image} alt={category.name} className="w-full h-24 object-cover rounded" />
+                                )}
+                                {/* Show subcategories count */}
+                                {subcategoriesByParent[category._id] && subcategoriesByParent[category._id].length > 0 && (
+                                  <div className="mt-2 text-xs text-blue-600">
+                                    {subcategoriesByParent[category._id].length} subcategory(ies)
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                      <p className="text-sm text-gray-600 mb-2">{category.description}</p>
-                      {category.image && (
-                        <img src={category.image} alt={category.name} className="w-full h-24 object-cover rounded" />
-                      )}
-                  </div>
-                  ))
+
+                        {/* Subcategories */}
+                        {subcategories.length > 0 && (
+                          <div>
+                            <h4 className="text-md font-semibold text-gray-700 mb-4">Subcategories</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                              {subcategories.map((category) => {
+                                // Find parent category - handle both populated and non-populated cases
+                                const parentId = category.parentCategory?._id || category.parentCategory;
+                                const parentCategory = categories.find(cat => {
+                                  const catId = cat._id?.toString() || cat._id;
+                                  const parentIdStr = parentId?.toString() || parentId;
+                                  return catId === parentIdStr;
+                                });
+                                
+                                return (
+                                  <div key={category._id} className="bg-gray-50 border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <div className="flex-1">
+                                        <h4 className="font-semibold text-gray-800">{category.name}</h4>
+                                        <p className="text-xs text-gray-500">Parent: {parentCategory?.name || category.parentCategory?.name || 'Unknown'}</p>
+                                      </div>
+                                      <div className="flex space-x-1">
+                                        <button
+                                          className="text-blue-600 hover:text-blue-800"
+                                          onClick={() => handleOpenCategoryModal(category)}
+                                          title="Edit Subcategory"
+                                        >
+                                          <FaEdit />
+                                        </button>
+                                        <button
+                                          className="text-red-600 hover:text-red-800"
+                                          onClick={() => handleDeleteCategory(category._id, category.name)}
+                                          disabled={categoryLoading}
+                                          title="Delete Subcategory"
+                                        >
+                                          <FaTrash />
+                                        </button>
+                                      </div>
+                                    </div>
+                                    <p className="text-sm text-gray-600 mb-2">{category.description}</p>
+                                    {category.image && (
+                                      <img src={category.image} alt={category.name} className="w-full h-24 object-cover rounded" />
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Show message if no categories */}
+                        {mainCategories.length === 0 && subcategories.length === 0 && (
+                          <div className="text-center py-8 text-gray-500">
+                            No categories found. Add your first category!
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()
               )}
               </div>
 
