@@ -3,6 +3,7 @@ import { FaUsers, FaBox, FaDollarSign, FaChartLine, FaEdit, FaTrash, FaEye, FaPl
 import { formatINR } from '../utils/formatCurrency';
 import sellerAPI from '../api/sellerAPI';
 import productAPI from '../api/productAPI';
+import bannerAPI from '../api/bannerAPI';
 import axiosInstance from '../api/axiosConfig';
 import { toast } from 'react-toastify';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar } from 'recharts';
@@ -116,6 +117,22 @@ const AdminDashboard = () => {
   });
   const [eventLoading, setEventLoading] = useState(false);
   const [eventError, setEventError] = useState('');
+
+  // Hero Banner state
+  const [heroBanners, setHeroBanners] = useState([]);
+  const [heroBannerLoading, setHeroBannerLoading] = useState(false);
+  const [heroBannerModal, setHeroBannerModal] = useState({ open: false, banner: null });
+  const [heroBannerForm, setHeroBannerForm] = useState({
+    title: '',
+    image: null,
+    imageUrl: '',
+    buttonText: 'Shop Now',
+    buttonLink: '/products',
+    description: '',
+    sortOrder: 0,
+    isActive: true
+  });
+  const [heroBannerError, setHeroBannerError] = useState('');
 
   // Helpers for event banner
   const toDateTimeLocal = (d) => {
@@ -287,6 +304,23 @@ const AdminDashboard = () => {
     } catch (error) {
       console.error('Error fetching event banners:', error);
       setEventBanners([]);
+    }
+  };
+
+  const fetchHeroBanners = async () => {
+    setHeroBannerLoading(true);
+    try {
+      const response = await bannerAPI.getBanners();
+      if (response.data.success && response.data.data) {
+        setHeroBanners(Array.isArray(response.data.data) ? response.data.data : []);
+      } else {
+        setHeroBanners([]);
+      }
+    } catch (error) {
+      console.error('Error fetching hero banners:', error);
+      setHeroBanners([]);
+    } finally {
+      setHeroBannerLoading(false);
     }
   };
 
@@ -541,6 +575,9 @@ const AdminDashboard = () => {
     }
     if (activeTab === 'orders') {
       setOrdersPage(1);
+    }
+    if (activeTab === 'hero-banner') {
+      fetchHeroBanners();
     }
   }, [activeTab]);
 
@@ -1047,6 +1084,119 @@ const AdminDashboard = () => {
 
   const [eventEditId, setEventEditId] = useState('');
 
+  // Hero Banner functions
+  const handleOpenHeroBannerModal = (banner = null) => {
+    setHeroBannerForm(banner ? {
+      title: banner.title || '',
+      image: null,
+      imageUrl: banner.imageUrl || banner.image || '',
+      buttonText: banner.buttonText || 'Shop Now',
+      buttonLink: banner.buttonLink || '/products',
+      description: banner.description || '',
+      sortOrder: banner.sortOrder || 0,
+      isActive: banner.isActive !== undefined ? banner.isActive : true
+    } : {
+      title: '',
+      image: null,
+      imageUrl: '',
+      buttonText: 'Shop Now',
+      buttonLink: '/products',
+      description: '',
+      sortOrder: 0,
+      isActive: true
+    });
+    setHeroBannerModal({ open: true, banner });
+    setHeroBannerError('');
+  };
+
+  const handleHeroBannerFormChange = (e) => {
+    const { name, value, files, type, checked } = e.target;
+    if (name === 'image') {
+      setHeroBannerForm({ ...heroBannerForm, [name]: files[0] });
+    } else if (type === 'checkbox') {
+      setHeroBannerForm({ ...heroBannerForm, [name]: checked });
+    } else {
+      setHeroBannerForm({ ...heroBannerForm, [name]: value });
+    }
+  };
+
+  const handleHeroBannerFormSubmit = async (e) => {
+    e.preventDefault();
+    setHeroBannerError('');
+    setHeroBannerLoading(true);
+
+    try {
+      const formData = new FormData();
+      
+      // Add all fields
+      if (heroBannerForm.title) formData.append('title', heroBannerForm.title);
+      if (heroBannerForm.image && heroBannerForm.image instanceof File) {
+        formData.append('image', heroBannerForm.image);
+      } else if (heroBannerForm.imageUrl) {
+        formData.append('imageUrl', heroBannerForm.imageUrl);
+      }
+      if (heroBannerForm.buttonText) formData.append('buttonText', heroBannerForm.buttonText);
+      if (heroBannerForm.buttonLink) formData.append('buttonLink', heroBannerForm.buttonLink);
+      if (heroBannerForm.description) formData.append('description', heroBannerForm.description);
+      formData.append('sortOrder', heroBannerForm.sortOrder || 0);
+      formData.append('isActive', heroBannerForm.isActive);
+
+      if (heroBannerModal.banner) {
+        await bannerAPI.updateBanner(heroBannerModal.banner._id, formData);
+        toast.success('Hero banner updated successfully');
+      } else {
+        await bannerAPI.createBanner(formData);
+        toast.success('Hero banner created successfully');
+      }
+
+      await fetchHeroBanners();
+      setHeroBannerModal({ open: false, banner: null });
+      setHeroBannerForm({
+        title: '',
+        image: null,
+        imageUrl: '',
+        buttonText: 'Shop Now',
+        buttonLink: '/products',
+        description: '',
+        sortOrder: 0,
+        isActive: true
+      });
+      setHeroBannerError('');
+    } catch (error) {
+      console.error('Hero banner save error:', error);
+      const errorMessage = error.response?.data?.message ||
+                          error.response?.data?.error ||
+                          error.message ||
+                          'Failed to save hero banner';
+      setHeroBannerError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setHeroBannerLoading(false);
+    }
+  };
+
+  const handleDeleteHeroBanner = async (bannerId, bannerTitle) => {
+    if (!window.confirm(`Are you sure you want to delete banner "${bannerTitle || 'this banner'}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    setHeroBannerLoading(true);
+    try {
+      await bannerAPI.deleteBanner(bannerId);
+      toast.success('Hero banner deleted successfully');
+      await fetchHeroBanners();
+    } catch (error) {
+      console.error('Delete hero banner error:', error);
+      const errorMessage = error.response?.data?.message ||
+                          error.response?.data?.error ||
+                          error.message ||
+                          'Failed to delete hero banner';
+      toast.error(errorMessage);
+    } finally {
+      setHeroBannerLoading(false);
+    }
+  };
+
   const handleEventFormSubmit = async (e) => {
     e.preventDefault();
     setEventError('');
@@ -1200,6 +1350,16 @@ const AdminDashboard = () => {
               }`}
             >
               Event Banner
+            </button>
+            <button
+              onClick={() => setActiveTab('hero-banner')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'hero-banner'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Hero Banner
             </button>
             <button
               onClick={() => setActiveTab('wallet')}
@@ -2678,6 +2838,234 @@ const AdminDashboard = () => {
                           disabled={categoryLoading}
                         >
                           {categoryLoading ? 'Saving...' : 'Save'}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Hero Banner Tab */}
+          {activeTab === 'hero-banner' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold text-gray-800">Hero Carousel Banner Management</h3>
+                <button
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                  onClick={() => handleOpenHeroBannerModal()}
+                >
+                  <FaPlus />
+                  Add Hero Banner
+                </button>
+              </div>
+
+              {/* Hero Banners List */}
+              <div className="bg-white rounded-lg shadow-md p-6">
+                <h4 className="text-md font-semibold mb-4">Hero Banners</h4>
+                {heroBannerLoading ? (
+                  <div className="text-center py-8 text-gray-500">Loading banners...</div>
+                ) : heroBanners.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">No hero banners found. Add your first banner!</div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {heroBanners.map((banner) => (
+                      <div key={banner._id} className="bg-gray-50 border rounded-lg p-4 hover:shadow-md transition-shadow">
+                        <div className="relative mb-3">
+                          {banner.imageUrl || banner.image ? (
+                            <img
+                              src={banner.imageUrl || banner.image}
+                              alt={banner.title || 'Hero Banner'}
+                              className="w-full h-32 object-cover rounded"
+                            />
+                          ) : (
+                            <div className="w-full h-32 bg-gray-200 rounded flex items-center justify-center">
+                              <span className="text-gray-400 text-sm">No Image</span>
+                            </div>
+                          )}
+                          {!banner.isActive && (
+                            <div className="absolute top-2 right-2 bg-red-500 text-white text-xs px-2 py-1 rounded">
+                              Inactive
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between mb-2">
+                          <h5 className="font-semibold text-gray-800">{banner.title || 'Untitled Banner'}</h5>
+                          <div className="flex space-x-1">
+                            <button
+                              className="text-blue-600 hover:text-blue-800"
+                              onClick={() => handleOpenHeroBannerModal(banner)}
+                              title="Edit Banner"
+                            >
+                              <FaEdit />
+                            </button>
+                            <button
+                              className="text-red-600 hover:text-red-800"
+                              onClick={() => handleDeleteHeroBanner(banner._id, banner.title)}
+                              disabled={heroBannerLoading}
+                              title="Delete Banner"
+                            >
+                              <FaTrash />
+                            </button>
+                          </div>
+                        </div>
+                        <p className="text-sm text-gray-600 mb-1">
+                          Button: {banner.buttonText || 'Shop Now'}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          Link: {banner.buttonLink || '/products'}
+                        </p>
+                        {banner.description && (
+                          <p className="text-xs text-gray-500 mt-1 line-clamp-2">{banner.description}</p>
+                        )}
+                        <p className="text-xs text-gray-500 mt-1">
+                          Sort Order: {banner.sortOrder || 0}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Hero Banner Modal */}
+              {heroBannerModal.open && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+                  <div className="bg-white rounded-lg shadow-lg p-8 w-full max-w-2xl mx-2 relative max-h-[90vh] overflow-y-auto">
+                    <button
+                      className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 text-2xl"
+                      onClick={() => setHeroBannerModal({ open: false, banner: null })}
+                    >
+                      &times;
+                    </button>
+                    <h2 className="text-2xl font-bold mb-4">
+                      {heroBannerModal.banner ? 'Edit Hero Banner' : 'Add Hero Banner'}
+                    </h2>
+                    <form onSubmit={handleHeroBannerFormSubmit} className="space-y-4">
+                      <div>
+                        <label className="block text-gray-700 font-medium mb-1">Title</label>
+                        <input
+                          type="text"
+                          name="title"
+                          value={heroBannerForm.title}
+                          onChange={handleHeroBannerFormChange}
+                          className="w-full border rounded px-3 py-2"
+                          placeholder="Banner title (optional)"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-gray-700 font-medium mb-1">Image</label>
+                        <input
+                          type="file"
+                          name="image"
+                          accept="image/*"
+                          onChange={handleHeroBannerFormChange}
+                          className="w-full border rounded px-3 py-2"
+                        />
+                        {heroBannerForm.imageUrl && !heroBannerForm.image && (
+                          <div className="mt-2">
+                            <img
+                              src={heroBannerForm.imageUrl}
+                              alt="Current banner"
+                              className="w-full h-32 object-cover rounded"
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-gray-700 font-medium mb-1">Or Image URL</label>
+                        <input
+                          type="url"
+                          name="imageUrl"
+                          value={heroBannerForm.imageUrl}
+                          onChange={handleHeroBannerFormChange}
+                          className="w-full border rounded px-3 py-2"
+                          placeholder="https://example.com/image.jpg"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-gray-700 font-medium mb-1">Button Text</label>
+                        <input
+                          type="text"
+                          name="buttonText"
+                          value={heroBannerForm.buttonText}
+                          onChange={handleHeroBannerFormChange}
+                          className="w-full border rounded px-3 py-2"
+                          placeholder="Shop Now"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-gray-700 font-medium mb-1">Button Link</label>
+                        <input
+                          type="text"
+                          name="buttonLink"
+                          value={heroBannerForm.buttonLink}
+                          onChange={handleHeroBannerFormChange}
+                          className="w-full border rounded px-3 py-2"
+                          placeholder="/products"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-gray-700 font-medium mb-1">Description (Optional)</label>
+                        <textarea
+                          name="description"
+                          value={heroBannerForm.description}
+                          onChange={handleHeroBannerFormChange}
+                          className="w-full border rounded px-3 py-2"
+                          rows="3"
+                          placeholder="Banner description"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-gray-700 font-medium mb-1">Sort Order</label>
+                          <input
+                            type="number"
+                            name="sortOrder"
+                            value={heroBannerForm.sortOrder}
+                            onChange={handleHeroBannerFormChange}
+                            className="w-full border rounded px-3 py-2"
+                            min="0"
+                          />
+                        </div>
+
+                        <div className="flex items-center mt-6">
+                          <input
+                            type="checkbox"
+                            name="isActive"
+                            checked={heroBannerForm.isActive}
+                            onChange={handleHeroBannerFormChange}
+                            className="mr-2"
+                          />
+                          <label className="text-gray-700 font-medium">Active</label>
+                        </div>
+                      </div>
+
+                      {heroBannerError && (
+                        <div className="text-red-600 mb-2">{heroBannerError}</div>
+                      )}
+
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          className="bg-gray-200 text-gray-700 px-4 py-2 rounded hover:bg-gray-300 disabled:opacity-50"
+                          onClick={() => setHeroBannerModal({ open: false, banner: null })}
+                          disabled={heroBannerLoading}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                          disabled={heroBannerLoading}
+                        >
+                          {heroBannerLoading ? 'Saving...' : heroBannerModal.banner ? 'Update' : 'Save'}
                         </button>
                       </div>
                     </form>
