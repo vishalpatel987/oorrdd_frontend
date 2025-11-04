@@ -2731,7 +2731,7 @@ const AdminDashboard = () => {
                                       title="Delete Category"
                                     >
                                       <FaTrash />
-                                    </button>
+                          </button>
                         </div>
                       </div>
                       <p className="text-sm text-gray-600 mb-2">{category.description}</p>

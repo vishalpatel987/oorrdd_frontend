@@ -20,7 +20,7 @@ import { addToCartAsync } from '../redux/slices/cartSlice';
 import { formatINR } from '../utils/formatCurrency';
 import productAPI from '../api/productAPI';
 import CategoriesGrid from '../components/common/CategoriesGrid';
-import HeroCarousel from '../components/common/HeroCarousel';
+import AdBanner from '../components/common/AdBanner';
 import EventBanner from '../components/common/EventBanner';
 import BrandMarquee from '../components/common/BrandMarquee';
 import ProductCard from '../components/common/ProductCard';
@@ -117,14 +117,15 @@ const Home = () => {
   useEffect(() => {
     productAPI.getDiscoverProducts().then(res => setDiscoverProducts(res.data)).catch(() => setDiscoverProducts([]));
     productAPI.getRecommendedProducts().then(res => setRecommendedProducts(res.data)).catch(() => setRecommendedProducts([]));
-  }, []);
+      }, []);
 
   return (
     <div className="min-h-screen">
-      {/* Hero Section */}
-      <HeroCarousel />
+      {/* Hero Banner Section */}
+      <AdBanner />
+      
       {/* Categories Section */}
-      <section className="py-16">
+      <section className="pt-8 pb-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center mb-12">
             <h2 className="text-3xl font-bold text-center w-full md:w-auto">Shop by Category</h2>
@@ -137,7 +138,7 @@ const Home = () => {
             </Link>
           </div>
           <CategoriesGrid categories={mainCategories} />
-          <div className="flex justify-center mt-8 md:hidden">
+          <div className="flex justify-center mt-4 md:hidden">
             <Link
               to="/categories"
               className="flex items-center text-primary-600 hover:text-primary-700 font-semibold text-lg"
@@ -201,7 +202,7 @@ const Home = () => {
       </section>
 
       {/* Featured Products Section */}
-      <section className="py-16 bg-gray-50">
+      <section className="pt-8 pb-16 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center mb-12">
             <h2 className="text-3xl font-bold">Featured Products</h2>
