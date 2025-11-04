@@ -18,80 +18,123 @@ const AdBanner = () => {
   const [isPaused, setIsPaused] = useState(false);
   const intervalRef = useRef(null);
 
-  // Fetch banners from API with caching
-  const fetchBanners = async () => {
+    // Fetch banners from API (cache disabled for instant updates)
+  const fetchBanners = async (skipCache = false) => {
     try {
       setLoading(true);
       setError(null);
 
-      // Check cache first
+      // Skip cache for immediate updates when skipCache is true
       const cacheKey = 'hero_banners_cache';
       const cachedData = localStorage.getItem(cacheKey);
       const cacheTime = localStorage.getItem(cacheKey + '_time');
       const now = Date.now();
 
-      // Use cache if it's less than 5 minutes old
-      if (cachedData && cacheTime && (now - parseInt(cacheTime)) < 5 * 60 * 1000) {
+      // Use cache only if skipCache is false and cache is less than 10 seconds old (very short cache)
+      if (!skipCache && cachedData && cacheTime && (now - parseInt(cacheTime)) < 10 * 1000) {                                                                             
         const cachedBanners = JSON.parse(cachedData);
-        setBanners(cachedBanners);
-        setLoading(false);
-        return;
+        // Only use cache if it has banners
+        if (Array.isArray(cachedBanners) && cachedBanners.length > 0) {
+          console.log('Using cached banners:', cachedBanners.length);
+          setBanners(cachedBanners);
+          setLoading(false);
+          return;
+        }
       }
 
       // Fetch banners from the API
+      console.log('Fetching banners from API...');
       const response = await bannerAPI.getAllBanners();
+      console.log('Banner API response:', response.data);
 
-      if (response.data.success && response.data.data && Array.isArray(response.data.data)) {
-        const fetchedBanners = response.data.data;
-        setBanners(fetchedBanners);
-        
-        // Cache the banners
-        localStorage.setItem(cacheKey, JSON.stringify(fetchedBanners));
-        localStorage.setItem(cacheKey + '_time', now.toString());
-
-        // Preload images for faster display
-        fetchedBanners.forEach((banner, index) => {
-          const imageUrl = banner.imageUrl || banner.image;
-          if (imageUrl) {
-            const img = new Image();
-            img.src = imageUrl;
-            img.onload = () => {
-              console.log(`Banner ${index + 1} preloaded successfully`);
-            };
-          }
+      if (response.data.success && response.data.data && Array.isArray(response.data.data)) {                                                                   
+        // Filter banners to only include those with images and are active
+        const fetchedBanners = response.data.data.filter(banner => {
+          const hasImage = !!(banner.imageUrl || banner.image);
+          const isActive = banner.isActive !== false; // Default to true if not specified
+          return hasImage && isActive;
         });
+
+        console.log('Fetched banners after filtering:', fetchedBanners.length);
+        
+        if (fetchedBanners.length > 0) {
+          setBanners(fetchedBanners);
+
+          // Cache the banners
+          localStorage.setItem(cacheKey, JSON.stringify(fetchedBanners));
+          localStorage.setItem(cacheKey + '_time', now.toString());
+
+          // Preload images for faster display
+          fetchedBanners.forEach((banner, index) => {
+            const imageUrl = banner.imageUrl || banner.image;
+            if (imageUrl) {
+              const img = new Image();
+              img.src = imageUrl;
+              img.onload = () => {
+                console.log(`Banner ${index + 1} preloaded successfully`);        
+              };
+              img.onerror = () => {
+                console.error(`Banner ${index + 1} image failed to load:`, imageUrl);
+              };
+            }
+          });
+        } else {
+          console.warn('No valid banners found after filtering');
+          // Clear cache if no banners found
+          localStorage.removeItem(cacheKey);
+          localStorage.removeItem(cacheKey + '_time');
+          setBanners([]);
+        }
       } else {
+        console.warn('Invalid API response structure:', response.data);
+        // Clear cache on invalid response
+        localStorage.removeItem(cacheKey);
+        localStorage.removeItem(cacheKey + '_time');
         setBanners([]);
       }
     } catch (error) {
       console.error('Error fetching banners:', error);
       setError('Failed to load banners');
+      // Clear cache on error
+      const cacheKey = 'hero_banners_cache';
+      localStorage.removeItem(cacheKey);
+      localStorage.removeItem(cacheKey + '_time');
       setBanners([]);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchBanners();
+    useEffect(() => {
+    // Always fetch fresh data on mount (skip cache)
+    fetchBanners(true);
 
-    // Refresh banners every 2 minutes to get updates from admin
+    // Refresh banners every 10 seconds to get updates from admin immediately        
     const refreshInterval = setInterval(() => {
-      fetchBanners();
-    }, 120000); // 2 minutes
+      fetchBanners(true); // Skip cache for refresh
+    }, 10000); // 10 seconds
 
     return () => clearInterval(refreshInterval);
   }, []);
 
-  // Refresh banners when page becomes visible (user switches back to tab)
+  // Refresh banners when page becomes visible (user switches back to tab) with cache skip      
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (!document.hidden) {
-        fetchBanners();
+        fetchBanners(true); // Skip cache when page becomes visible
       }
     };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener('visibilitychange', handleVisibilityChange);      
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);                                                                      
+  }, []);
+
+  // Also refresh on window focus (when user clicks back to tab)
+  useEffect(() => {
+    const handleFocus = () => {
+      fetchBanners(true); // Skip cache on focus
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
   }, []);
 
   // Auto-slide function
@@ -209,7 +252,11 @@ const AdBanner = () => {
   };
 
   // If no banners and not loading, don't render anything
+  // But log for debugging
   if (!loading && banners.length === 0) {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('AdBanner: No banners to display. Check if banner is active and has an image.');
+    }
     return null;
   }
 

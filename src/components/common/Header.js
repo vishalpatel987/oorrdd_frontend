@@ -261,26 +261,26 @@ const Header = () => {
               <FaSearch className="text-lg" />
             </button>
            
-            {/* Chat Icon - Show for all authenticated users */}
+                        {/* Chat Icon - Show for all authenticated users (hidden on mobile) */}
             {isAuthenticated && (
-              <Link to="/chat" className="relative p-2 text-gray-600 hover:text-primary-600 transition-colors duration-200">
+              <Link to="/chat" className="hidden md:flex relative p-2 text-gray-600 hover:text-primary-600 transition-colors duration-200">                                    
                 <FaComments className="text-lg md:text-xl" />
                 {totalUnread > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center animate-bounce">{totalUnread}</span>
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center animate-bounce">{totalUnread}</span>                                                            
                 )}
               </Link>
             )}
 
-            {/* Admin Dashboard Icon - Only for admin users */}
+            {/* Admin Dashboard Icon - Only for admin users (hidden on mobile) */}
             {isAuthenticated && user?.role === 'admin' && (
-              <Link to="/admin" className="p-2 text-gray-600 hover:text-primary-600 transition-colors duration-200" title="Admin Dashboard">
+              <Link to="/admin" className="hidden md:flex p-2 text-gray-600 hover:text-primary-600 transition-colors duration-200" title="Admin Dashboard">                    
                 <FaTachometerAlt className="text-lg md:text-xl" />
               </Link>
             )}
 
-            {/* Seller Dashboard Icon - Only for seller users */}
+            {/* Seller Dashboard Icon - Only for seller users (hidden on mobile) */}
             {isAuthenticated && user?.role === 'seller' && (
-              <Link to="/seller" className="p-2 text-gray-600 hover:text-primary-600 transition-colors duration-200" title="Seller Dashboard">
+              <Link to="/seller" className="hidden md:flex p-2 text-gray-600 hover:text-primary-600 transition-colors duration-200" title="Seller Dashboard">                  
                 <FaTachometerAlt className="text-lg md:text-xl" />
               </Link>
             )}
@@ -299,12 +299,12 @@ const Header = () => {
                 <span className="absolute -top-1 -right-1 bg-pink-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center animate-bounce">{wishlistItems.length}</span>
               )}
             </Link>
-            {/* User Menu */}
+                        {/* User Menu (hidden on mobile) */}
             {isAuthenticated ? (
-              <div className="relative">
+              <div className="hidden md:block relative">
                 <button
                   onClick={toggleUserMenu}
-                  className="flex items-center space-x-1 md:space-x-2 p-2 text-gray-600 hover:text-primary-600 transition-colors duration-200 focus:outline-none"
+                  className="flex items-center space-x-1 md:space-x-2 p-2 text-gray-600 hover:text-primary-600 transition-colors duration-200 focus:outline-none"                                                                               
                 >
                   <FaUser className="text-lg md:text-xl" />
                   <span className="hidden md:inline text-sm font-medium truncate max-w-[80px]">{user?.name}</span>
