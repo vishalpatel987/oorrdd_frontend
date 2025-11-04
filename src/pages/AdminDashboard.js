@@ -18,6 +18,9 @@ const AdminDashboard = () => {
   const [productSearch, setProductSearch] = useState('');
   const [productStatusFilter, setProductStatusFilter] = useState('');
   const [productStockFilter, setProductStockFilter] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
+  const [ordersPage, setOrdersPage] = useState(1);
   const [orders, setOrders] = useState([]);
   const [stats, setStats] = useState({
     totalUsers: 0,
@@ -59,8 +62,9 @@ const AdminDashboard = () => {
   const [categories, setCategories] = useState([]);
   const [loadingCategories, setLoadingCategories] = useState(false);
   const [categoryModal, setCategoryModal] = useState({ open: false, category: null });
-  const [categoryForm, setCategoryForm] = useState({ name: '', slug: '', description: '', image: null });
+  const [categoryForm, setCategoryForm] = useState({ name: '', slug: '', description: '', image: null, parentCategory: '' });
   const [categoryError, setCategoryError] = useState('');
+  const [categoryLoading, setCategoryLoading] = useState(false);
 
   // Wallet state
   const [walletTab, setWalletTab] = useState('overview');
@@ -531,6 +535,13 @@ const AdminDashboard = () => {
     if (activeTab === 'overview' || activeTab === 'orders') {
       fetchCancellationRequests();
     }
+    // Reset pagination when switching tabs
+    if (activeTab === 'products') {
+      setCurrentPage(1);
+    }
+    if (activeTab === 'orders') {
+      setOrdersPage(1);
+    }
   }, [activeTab]);
 
   // Fetch wallet data when tab changes
@@ -929,7 +940,7 @@ const AdminDashboard = () => {
 
   // Category management functions
   const handleOpenCategoryModal = (category = null) => {
-    setCategoryForm(category ? { ...category, image: null } : { name: '', slug: '', description: '', image: null });
+    setCategoryForm(category ? { ...category, image: null, parentCategory: category.parentCategory || '' } : { name: '', slug: '', description: '', image: null, parentCategory: '' });
     setCategoryModal({ open: true, category });
     setCategoryError('');
   };
@@ -946,24 +957,62 @@ const AdminDashboard = () => {
   const handleCategoryFormSubmit = async (e) => {
     e.preventDefault();
     setCategoryError('');
+    setCategoryLoading(true);
+    
     try {
+      // Validate required fields
+      if (!categoryForm.name || !categoryForm.slug) {
+        setCategoryError('Name and slug are required');
+        setCategoryLoading(false);
+        return;
+      }
+
       const formData = new FormData();
-      Object.keys(categoryForm).forEach(key => {
-        if (categoryForm[key] !== null && categoryForm[key] !== '') {
-          formData.append(key, categoryForm[key]);
-        }
-      });
+      
+      // Add required fields
+      formData.append('name', categoryForm.name.trim());
+      formData.append('slug', categoryForm.slug.trim());
+      
+      // Add optional fields
+      if (categoryForm.description) {
+        formData.append('description', categoryForm.description.trim());
+      }
+      
+      // Add image if provided
+      if (categoryForm.image && categoryForm.image instanceof File) {
+        formData.append('image', categoryForm.image);
+      }
+      
+      // Add parentCategory (handle empty string as null)
+      if (categoryForm.parentCategory && categoryForm.parentCategory !== '' && categoryForm.parentCategory !== 'null') {
+        formData.append('parentCategory', categoryForm.parentCategory);
+      }
 
       if (categoryModal.category) {
         await productAPI.updateCategory(categoryModal.category._id, formData);
+        toast.success('Category updated successfully');
       } else {
         await productAPI.createCategory(formData);
+        toast.success('Category created successfully');
       }
       
-      fetchCategories();
+      // Refresh categories list
+      await fetchCategories();
+      
+      // Close modal and reset form
       setCategoryModal({ open: false, category: null });
+      setCategoryForm({ name: '', slug: '', description: '', image: null, parentCategory: '' });
+      setCategoryError('');
     } catch (error) {
-      setCategoryError(error.response?.data?.message || 'Failed to save category');
+      console.error('Category save error:', error);
+      const errorMessage = error.response?.data?.message || 
+                          error.response?.data?.error || 
+                          error.message || 
+                          'Failed to save category';
+      setCategoryError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setCategoryLoading(false);
     }
   };
 
@@ -1658,24 +1707,31 @@ const AdminDashboard = () => {
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800">Product Management</h3>
                   <p className="text-sm text-gray-600">
-                    Showing {products.filter(product => {
-                      const matchesSearch = !productSearch || 
-                        product.name.toLowerCase().includes(productSearch.toLowerCase()) ||
-                        product.brand.toLowerCase().includes(productSearch.toLowerCase()) ||
-                        product.seller?.shopName?.toLowerCase().includes(productSearch.toLowerCase());
+                    {(() => {
+                      const filteredCount = products.filter(product => {
+                        const matchesSearch = !productSearch || 
+                          product.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+                          product.brand.toLowerCase().includes(productSearch.toLowerCase()) ||
+                          product.seller?.shopName?.toLowerCase().includes(productSearch.toLowerCase());
+                        
+                        const matchesStatus = !productStatusFilter || 
+                          (productStatusFilter === 'approved' && product.isApproved) ||
+                          (productStatusFilter === 'pending' && !product.isApproved && !product.rejectionReason) ||
+                          (productStatusFilter === 'rejected' && product.rejectionReason);
+                        
+                        const matchesStock = !productStockFilter ||
+                          (productStockFilter === 'in-stock' && product.stock > 10) ||
+                          (productStockFilter === 'low-stock' && product.stock > 0 && product.stock <= 10) ||
+                          (productStockFilter === 'out-of-stock' && product.stock === 0);
+                        
+                        return matchesSearch && matchesStatus && matchesStock;
+                      }).length;
                       
-                      const matchesStatus = !productStatusFilter || 
-                        (productStatusFilter === 'approved' && product.isApproved) ||
-                        (productStatusFilter === 'pending' && !product.isApproved && !product.rejectionReason) ||
-                        (productStatusFilter === 'rejected' && product.rejectionReason);
+                      const startIndex = (currentPage - 1) * itemsPerPage + 1;
+                      const endIndex = Math.min(currentPage * itemsPerPage, filteredCount);
                       
-                      const matchesStock = !productStockFilter ||
-                        (productStockFilter === 'in-stock' && product.stock > 10) ||
-                        (productStockFilter === 'low-stock' && product.stock > 0 && product.stock <= 10) ||
-                        (productStockFilter === 'out-of-stock' && product.stock === 0);
-                      
-                      return matchesSearch && matchesStatus && matchesStock;
-                    }).length} of {products.length} products
+                      return `Showing ${startIndex} to ${endIndex} of ${filteredCount} products (${products.length} total)`;
+                    })()}
                   </p>
                 </div>
                 <div className="text-sm text-gray-600">
@@ -1691,14 +1747,20 @@ const AdminDashboard = () => {
                     placeholder="Search products by name, brand, or vendor..."
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     value={productSearch}
-                    onChange={(e) => setProductSearch(e.target.value)}
+                    onChange={(e) => {
+                      setProductSearch(e.target.value);
+                      setCurrentPage(1); // Reset to first page on search
+                    }}
                   />
                           </div>
                 <div className="flex gap-2">
                   <select
                     className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     value={productStatusFilter}
-                    onChange={(e) => setProductStatusFilter(e.target.value)}
+                    onChange={(e) => {
+                      setProductStatusFilter(e.target.value);
+                      setCurrentPage(1); // Reset to first page on filter change
+                    }}
                   >
                     <option value="">All Status</option>
                     <option value="approved">Approved</option>
@@ -1708,7 +1770,10 @@ const AdminDashboard = () => {
                   <select
                     className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     value={productStockFilter}
-                    onChange={(e) => setProductStockFilter(e.target.value)}
+                    onChange={(e) => {
+                      setProductStockFilter(e.target.value);
+                      setCurrentPage(1); // Reset to first page on filter change
+                    }}
                   >
                     <option value="">All Stock</option>
                     <option value="in-stock">In Stock</option>
@@ -1796,8 +1861,9 @@ const AdminDashboard = () => {
                         <td colSpan="7" className="text-center py-8 text-gray-500">Loading products...</td>
                       </tr>
                     ) : (
-                      products
-                        .filter(product => {
+                      (() => {
+                        // Filter products
+                        const filteredProducts = products.filter(product => {
                           const matchesSearch = !productSearch || 
                             product.name.toLowerCase().includes(productSearch.toLowerCase()) ||
                             product.brand.toLowerCase().includes(productSearch.toLowerCase()) ||
@@ -1814,8 +1880,20 @@ const AdminDashboard = () => {
                             (productStockFilter === 'out-of-stock' && product.stock === 0);
                           
                           return matchesSearch && matchesStatus && matchesStock;
-                        })
-                        .map((product) => (
+                        });
+
+                        // Calculate pagination
+                        const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
+                        const startIndex = (currentPage - 1) * itemsPerPage;
+                        const endIndex = startIndex + itemsPerPage;
+                        const paginatedProducts = filteredProducts.slice(startIndex, endIndex);
+
+                        // Reset to page 1 if current page exceeds total pages
+                        if (currentPage > totalPages && totalPages > 0) {
+                          setCurrentPage(1);
+                        }
+
+                        return paginatedProducts.map((product) => (
                         <tr key={product._id} className="border-b border-gray-100 hover:bg-gray-50">
                           <td className="py-3 px-4">
                             <input
@@ -1916,11 +1994,94 @@ const AdminDashboard = () => {
                         </div>
                           </td>
                         </tr>
-                      ))
+                      ));
+                      })()
                     )}
                   </tbody>
                 </table>
                       </div>
+
+              {/* Pagination Controls */}
+              {(() => {
+                const filteredProducts = products.filter(product => {
+                  const matchesSearch = !productSearch || 
+                    product.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+                    product.brand.toLowerCase().includes(productSearch.toLowerCase()) ||
+                    product.seller?.shopName?.toLowerCase().includes(productSearch.toLowerCase());
+                  
+                  const matchesStatus = !productStatusFilter || 
+                    (productStatusFilter === 'approved' && product.isApproved) ||
+                    (productStatusFilter === 'pending' && !product.isApproved && !product.rejectionReason) ||
+                    (productStatusFilter === 'rejected' && product.rejectionReason);
+                  
+                  const matchesStock = !productStockFilter ||
+                    (productStockFilter === 'in-stock' && product.stock > 10) ||
+                    (productStockFilter === 'low-stock' && product.stock > 0 && product.stock <= 10) ||
+                    (productStockFilter === 'out-of-stock' && product.stock === 0);
+                  
+                  return matchesSearch && matchesStatus && matchesStock;
+                });
+
+                const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
+                const startIndex = (currentPage - 1) * itemsPerPage;
+                const endIndex = Math.min(startIndex + itemsPerPage, filteredProducts.length);
+
+                if (totalPages <= 1) return null; // Don't show pagination if only one page
+
+                return (
+                  <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="text-sm text-gray-600">
+                      Showing {startIndex + 1} to {endIndex} of {filteredProducts.length} products
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                        className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                      >
+                        Previous
+                      </button>
+                      
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                          let pageNum;
+                          if (totalPages <= 5) {
+                            pageNum = i + 1;
+                          } else if (currentPage <= 3) {
+                            pageNum = i + 1;
+                          } else if (currentPage >= totalPages - 2) {
+                            pageNum = totalPages - 4 + i;
+                          } else {
+                            pageNum = currentPage - 2 + i;
+                          }
+                          
+                          return (
+                            <button
+                              key={pageNum}
+                              onClick={() => setCurrentPage(pageNum)}
+                              className={`px-3 py-2 border rounded-lg text-sm font-medium ${
+                                currentPage === pageNum
+                                  ? 'bg-blue-600 text-white border-blue-600'
+                                  : 'border-gray-300 hover:bg-gray-50'
+                              }`}
+                            >
+                              {pageNum}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      
+                      <button
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage === totalPages}
+                        className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -1928,7 +2089,16 @@ const AdminDashboard = () => {
           {activeTab === 'orders' && (
             <div>
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-semibold text-gray-800">Order Management</h3>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800">Order Management</h3>
+                  <p className="text-sm text-gray-600">
+                    {(() => {
+                      const startIndex = (ordersPage - 1) * itemsPerPage + 1;
+                      const endIndex = Math.min(ordersPage * itemsPerPage, orders.length);
+                      return `Showing ${startIndex} to ${endIndex} of ${orders.length} orders`;
+                    })()}
+                  </p>
+                </div>
               </div>
 
               {/* Pending Cancellation Requests */}
@@ -2007,25 +2177,101 @@ const AdminDashboard = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {orders.map((order) => (
-                      <tr key={order._id} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="py-3 px-4 font-medium text-gray-800">#{order.orderNumber || order._id}</td>
-                        <td className="py-3 px-4 text-gray-600">{order.user?.name}</td>
-                        <td className="py-3 px-4 text-gray-600">{order.seller?.shopName}</td>
-                        <td className="py-3 px-4 font-medium">{formatINR(order.totalPrice)}</td>
-                        <td className="py-3 px-4">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.orderStatus)}`}>{order.orderStatus}</span>
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="flex space-x-2">
-                            <button className="text-blue-600 hover:text-blue-800" onClick={() => handleViewOrder(order)}><FaEye /></button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                    {(() => {
+                      // Calculate pagination
+                      const totalPages = Math.ceil(orders.length / itemsPerPage);
+                      const startIndex = (ordersPage - 1) * itemsPerPage;
+                      const endIndex = startIndex + itemsPerPage;
+                      const paginatedOrders = orders.slice(startIndex, endIndex);
+
+                      // Reset to page 1 if current page exceeds total pages
+                      if (ordersPage > totalPages && totalPages > 0) {
+                        setOrdersPage(1);
+                      }
+
+                      return paginatedOrders.map((order) => (
+                        <tr key={order._id} className="border-b border-gray-100 hover:bg-gray-50">
+                          <td className="py-3 px-4 font-medium text-gray-800">#{order.orderNumber || order._id}</td>
+                          <td className="py-3 px-4 text-gray-600">{order.user?.name}</td>
+                          <td className="py-3 px-4 text-gray-600">{order.seller?.shopName}</td>
+                          <td className="py-3 px-4 font-medium">{formatINR(order.totalPrice)}</td>
+                          <td className="py-3 px-4">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.orderStatus)}`}>{order.orderStatus}</span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex space-x-2">
+                              <button className="text-blue-600 hover:text-blue-800" onClick={() => handleViewOrder(order)}><FaEye /></button>
+                            </div>
+                          </td>
+                        </tr>
+                      ));
+                    })()}
                   </tbody>
                 </table>
               </div>
+
+              {/* Pagination Controls */}
+              {(() => {
+                const totalPages = Math.ceil(orders.length / itemsPerPage);
+                const startIndex = (ordersPage - 1) * itemsPerPage;
+                const endIndex = Math.min(startIndex + itemsPerPage, orders.length);
+
+                if (totalPages <= 1) return null; // Don't show pagination if only one page
+
+                return (
+                  <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="text-sm text-gray-600">
+                      Showing {startIndex + 1} to {endIndex} of {orders.length} orders
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setOrdersPage(prev => Math.max(1, prev - 1))}
+                        disabled={ordersPage === 1}
+                        className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                      >
+                        Previous
+                      </button>
+                      
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                          let pageNum;
+                          if (totalPages <= 5) {
+                            pageNum = i + 1;
+                          } else if (ordersPage <= 3) {
+                            pageNum = i + 1;
+                          } else if (ordersPage >= totalPages - 2) {
+                            pageNum = totalPages - 4 + i;
+                          } else {
+                            pageNum = ordersPage - 2 + i;
+                          }
+                          
+                          return (
+                            <button
+                              key={pageNum}
+                              onClick={() => setOrdersPage(pageNum)}
+                              className={`px-3 py-2 border rounded-lg text-sm font-medium ${
+                                ordersPage === pageNum
+                                  ? 'bg-blue-600 text-white border-blue-600'
+                                  : 'border-gray-300 hover:bg-gray-50'
+                              }`}
+                            >
+                              {pageNum}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      
+                      <button
+                        onClick={() => setOrdersPage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={ordersPage === totalPages}
+                        className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -2286,8 +2532,21 @@ const AdminDashboard = () => {
                       </div>
                       {categoryError && <div className="text-red-600 mb-2">{categoryError}</div>}
                       <div className="flex justify-end gap-2">
-                        <button type="button" className="bg-gray-200 text-gray-700 px-4 py-2 rounded" onClick={() => setCategoryModal({ open: false, category: null })}>Cancel</button>
-                        <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Save</button>
+                        <button 
+                          type="button" 
+                          className="bg-gray-200 text-gray-700 px-4 py-2 rounded hover:bg-gray-300 disabled:opacity-50" 
+                          onClick={() => setCategoryModal({ open: false, category: null })}
+                          disabled={categoryLoading}
+                        >
+                          Cancel
+                        </button>
+                        <button 
+                          type="submit" 
+                          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed" 
+                          disabled={categoryLoading}
+                        >
+                          {categoryLoading ? 'Saving...' : 'Save'}
+                        </button>
                       </div>
                     </form>
                   </div>
