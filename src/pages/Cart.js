@@ -17,9 +17,14 @@ const Cart = () => {
     dispatch(fetchCart());
   }, [dispatch]);
 
-  const updateQuantity = (productId, newQuantity) => {
+    const updateQuantity = async (productId, newQuantity) => {
     if (newQuantity < 1) return;
-    dispatch(updateCartQuantityAsync({ productId, quantity: newQuantity }));
+    try {
+      await dispatch(updateCartQuantityAsync({ productId, quantity: newQuantity })).unwrap();
+    } catch (error) {
+      // If update fails, refetch cart to revert optimistic update
+      dispatch(fetchCart());
+    }
   };
 
   const removeItem = (productId) => {
@@ -72,12 +77,12 @@ const Cart = () => {
           </Link>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-8">
           {/* Cart Items */}
           <div className="lg:col-span-2">
             {/* Available Items */}
             {availableItems.length > 0 && (
-              <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+              <div className="bg-white rounded-lg shadow-md p-6 mb-4 md:mb-6">
                 <h2 className="text-xl font-semibold text-gray-800 mb-4">Available Items</h2>
                 <div className="space-y-4">
                   {availableItems.map((item) => (

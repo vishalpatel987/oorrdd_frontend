@@ -34,10 +34,11 @@ const Header = () => {
   const { chatUnreadCounts } = useSelector((state) => state.ui);
   const totalUnread = Object.values(chatUnreadCounts || {}).reduce((a, b) => a + b, 0);
   const wishlistItems = useSelector((state) => state.wishlist.items);
-  const drawerRef = useRef();
+    const drawerRef = useRef();
   const socketRef = useRef();
+  const userMenuRef = useRef();
 
- 
+
   // Close drawer on outside click
   useEffect(() => {
     if (!isMenuOpen) return;
@@ -47,8 +48,20 @@ const Header = () => {
       }
     }
     document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);        
   }, [isMenuOpen]);
+
+  // Close user menu on outside click
+  useEffect(() => {
+    if (!isUserMenuOpen) return;
+    function handleClick(e) {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target)) {
+        setIsUserMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);        
+  }, [isUserMenuOpen]);
 
   useEffect(() => {
     if (!isAuthenticated || !user || !user._id) return;
@@ -250,8 +263,8 @@ const Header = () => {
             </form>
           </div>
 
-          {/* Right: Chat, Dashboard, Icons & User */}
-          <div className="flex items-center space-x-2 md:space-x-3">
+                      {/* Right: Icons */}
+          <div className="flex items-center space-x-1">
             {/* Mobile Search Icon */}
             <button
               className="md:hidden p-2 text-gray-600 hover:text-primary-600 focus:outline-none transition-colors duration-200"
@@ -260,30 +273,6 @@ const Header = () => {
             >
               <FaSearch className="text-lg" />
             </button>
-           
-                        {/* Chat Icon - Show for all authenticated users (hidden on mobile) */}
-            {isAuthenticated && (
-              <Link to="/chat" className="hidden md:flex relative p-2 text-gray-600 hover:text-primary-600 transition-colors duration-200">                                    
-                <FaComments className="text-lg md:text-xl" />
-                {totalUnread > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center animate-bounce">{totalUnread}</span>                                                            
-                )}
-              </Link>
-            )}
-
-            {/* Admin Dashboard Icon - Only for admin users (hidden on mobile) */}
-            {isAuthenticated && user?.role === 'admin' && (
-              <Link to="/admin" className="hidden md:flex p-2 text-gray-600 hover:text-primary-600 transition-colors duration-200" title="Admin Dashboard">                    
-                <FaTachometerAlt className="text-lg md:text-xl" />
-              </Link>
-            )}
-
-            {/* Seller Dashboard Icon - Only for seller users (hidden on mobile) */}
-            {isAuthenticated && user?.role === 'seller' && (
-              <Link to="/seller" className="hidden md:flex p-2 text-gray-600 hover:text-primary-600 transition-colors duration-200" title="Seller Dashboard">                  
-                <FaTachometerAlt className="text-lg md:text-xl" />
-              </Link>
-            )}
           
             {/* Cart */}
             <Link to="/cart" className="relative p-2 text-gray-600 hover:text-primary-600 transition-colors duration-200">
@@ -292,78 +281,122 @@ const Header = () => {
                 <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center animate-bounce">{itemCount}</span>
               )}
             </Link>
-            {/* Wishlist */}
-            <Link to="/wishlist" className="relative p-2 text-gray-600 hover:text-primary-600 transition-colors duration-200">
+                        {/* Wishlist */}
+            <Link to="/wishlist" className="relative p-2 text-gray-600 hover:text-primary-600 transition-colors duration-200">                                  
               <FaHeart className="text-lg md:text-xl" />
               {wishlistItems && wishlistItems.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-pink-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center animate-bounce">{wishlistItems.length}</span>
+                <span className="absolute -top-1 -right-1 bg-pink-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center animate-bounce">{wishlistItems.length}</span>                                                    
               )}
             </Link>
-                        {/* User Menu (hidden on mobile) */}
-            {isAuthenticated ? (
-              <div className="hidden md:block relative">
-                <button
-                  onClick={toggleUserMenu}
-                  className="flex items-center space-x-1 md:space-x-2 p-2 text-gray-600 hover:text-primary-600 transition-colors duration-200 focus:outline-none"                                                                               
-                >
-                  <FaUser className="text-lg md:text-xl" />
-                  <span className="hidden md:inline text-sm font-medium truncate max-w-[80px]">{user?.name}</span>
-                  {user?.role && (
-                    <span className={`hidden md:inline ml-1 px-2 py-0.5 rounded text-xs font-semibold transition-colors duration-200
-                      ${user.role === 'admin' ? 'bg-purple-100 text-purple-700' : user.role === 'seller' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}
-                    >
-                      {user.role === 'admin' ? 'Admin' : user.role === 'seller' ? 'Vendor' : 'Customer'}
-                    </span>
-                  )}
-                </button>
-                {isUserMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-44 bg-white rounded-md shadow-lg py-1 z-50 animate-fade-in">
-                    <Link
-                      to="/profile"
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 transition-colors duration-200"
-                      onClick={() => setIsUserMenuOpen(false)}
-                    >
-                      Profile
-                    </Link>
-                    {/* Admin Dashboard Link */}
-                    {user?.role === 'admin' && (
-                      <Link
-                        to="/admin"
-                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 transition-colors duration-200"
-                        onClick={() => setIsUserMenuOpen(false)}
-                      >
-                        <FaTachometerAlt className="inline mr-2" /> Admin Dashboard
-                      </Link>
-                    )}
-                    {/* Seller Dashboard Link */}
-                    {user?.role === 'seller' && (
-                      <Link
-                        to="/seller"
-                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 transition-colors duration-200"
-                        onClick={() => setIsUserMenuOpen(false)}
-                      >
-                        <FaTachometerAlt className="inline mr-2" /> Seller Dashboard
-                      </Link>
-                    )}
-                    <button
-                      onClick={handleLogout}
-                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 transition-colors duration-200"
-                    >
-                      <FaSignOutAlt className="inline mr-2" /> Logout
-                    </button>
-                  </div>
+            
+            {/* Chat - Desktop only */}
+            {isAuthenticated && (
+              <Link to="/chat" className="hidden md:block relative p-2 text-gray-600 hover:text-primary-600 transition-colors duration-200">
+                <FaComments className="text-lg md:text-xl" />
+                {totalUnread > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center animate-bounce">{totalUnread}</span>
                 )}
-              </div>
-            ) : (
-              <div className="hidden md:flex items-center space-x-2">
-                <Link to="/login" className="btn-outline px-3 py-1.5 text-xs">Login</Link>
-                <Link to="/register" className="btn-primary px-3 py-1.5 text-xs">Register</Link>
+              </Link>
+            )}
+            
+            {/* Dashboard + Profile + Name & Role - Desktop only */}
+            {isAuthenticated && (
+              <div className="hidden md:flex md:items-center md:gap-2 relative">
+                {/* Dashboard Icon */}
+                {(user?.role === 'seller' || user?.role === 'admin') && (
+                  <Link 
+                    to={user?.role === 'admin' ? '/admin' : '/seller'} 
+                    className="p-2 text-gray-600 hover:text-primary-600 transition-colors duration-200"
+                    aria-label={user?.role === 'admin' ? 'Admin Dashboard' : 'Vendor Dashboard'}
+                  >
+                    <FaTachometerAlt className="text-lg md:text-xl" />
+                  </Link>
+                )}
+                
+                {/* Profile Icon */}
+                <div className="relative" ref={userMenuRef}>    
+                  <button
+                    onClick={toggleUserMenu}
+                    className="p-2 text-gray-600 hover:text-primary-600 transition-colors duration-200 focus:outline-none"
+                    aria-label="User menu"
+                  >
+                    <FaUser className="text-lg md:text-xl" />
+                  </button>
+                  {/* User Dropdown Menu */}
+                  {isUserMenuOpen && (
+                    <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+                      <Link
+                        to="/profile"
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-600 transition-colors"
+                        onClick={() => setIsUserMenuOpen(false)}
+                      >
+                        Profile
+                      </Link>
+                      {user?.role === 'admin' && (
+                        <Link
+                          to="/admin"
+                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-600 transition-colors flex items-center"
+                          onClick={() => setIsUserMenuOpen(false)}
+                        >
+                          <FaTachometerAlt className="mr-2" /> Admin Dashboard
+                        </Link>
+                      )}
+                      {user?.role === 'seller' && (
+                        <Link
+                          to="/seller"
+                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-600 transition-colors flex items-center"
+                          onClick={() => setIsUserMenuOpen(false)}
+                        >
+                          <FaTachometerAlt className="mr-2" /> Vendor Dashboard
+                        </Link>
+                      )}
+                      <button
+                        onClick={() => {
+                          handleLogout();
+                          setIsUserMenuOpen(false);
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-primary-50 hover:text-primary-600 transition-colors flex items-center"
+                      >
+                        <FaSignOutAlt className="mr-2" /> Logout
+                      </button>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Name and Role */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-medium text-gray-700 max-w-[100px] truncate">
+                    {user?.name || user?.firstName || 'User'}
+                  </span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold whitespace-nowrap ${
+                    user?.role === 'admin' ? 'bg-red-100 text-red-700' :
+                    user?.role === 'seller' ? 'bg-blue-100 text-blue-700' :
+                    'bg-gray-100 text-gray-700'
+                  }`}>
+                    {user?.role === 'admin' ? 'Admin' :
+                     user?.role === 'seller' ? 'Vendor' :
+                     'User'}
+                  </span>
+                </div>
               </div>
             )}
+            
+            {/* Login/Register - Desktop only (when not authenticated) */}
+            {!isAuthenticated && (
+              <>
+                <Link to="/login" className="hidden md:block px-3 py-1.5 text-sm text-gray-600 hover:text-primary-600 transition-colors duration-200">
+                  Login
+                </Link>
+                <Link to="/register" className="hidden md:block px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors duration-200">
+                  Register
+                </Link>
+              </>
+            )}
+            
             {/* Mobile Menu Button */}
             <button
               onClick={toggleMobileMenu}
-              className="md:hidden p-2 text-gray-600 hover:text-primary-600 focus:outline-none transition-colors duration-200"
+              className="md:hidden p-2 text-gray-600 hover:text-primary-600 focus:outline-none transition-colors duration-200"                                  
               aria-label="Open menu"
             >
               {isMenuOpen ? <FaTimes /> : <FaBars />}

@@ -1,11 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector, useStore } from 'react-redux';
 import { Link } from 'react-router-dom';
-import { 
-  FaArrowRight, 
-  FaStar, 
-  FaShoppingCart, 
-  FaHeart,
+import {
+  FaArrowRight,
   FaTruck,
   FaShieldAlt,
   FaHeadset,
@@ -17,7 +14,6 @@ import 'swiper/css';
 import 'swiper/css/pagination';
 import { fetchFeaturedProducts, fetchProducts } from '../redux/slices/productSlice';
 import { addToCartAsync } from '../redux/slices/cartSlice';
-import { formatINR } from '../utils/formatCurrency';
 import productAPI from '../api/productAPI';
 import CategoriesGrid from '../components/common/CategoriesGrid';
 import AdBanner from '../components/common/AdBanner';
@@ -28,7 +24,7 @@ import { fetchWishlist, addToWishlist, removeFromWishlist } from '../redux/slice
 
 const Home = () => {
   const dispatch = useDispatch();
-  const { featuredProducts, loading, products } = useSelector((state) => state.products);
+  const { featuredProducts, loading } = useSelector((state) => state.products);
   const [categories, setCategories] = useState([]);
   const { items: wishlistItems } = useSelector((state) => state.wishlist);
   const { isAuthenticated } = useSelector((state) => state.auth);
@@ -54,7 +50,7 @@ const Home = () => {
       localStorage.setItem('cart', JSON.stringify(state.cart));
     });
     return unsubscribe;
-  }, []);
+  }, [store]);
 
   // Wishlist logic
   const isInWishlist = (productId) => wishlistItems.some((item) => String(item._id) === String(productId));
@@ -97,10 +93,7 @@ const Home = () => {
     }
   ];
 
-  // Helper to slugify product name
-  const slugify = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-  // Helper to get image for product
-  const getProductImage = (name) => `/product-images/${slugify(name)}.jpg`;
+
 
   // Filter only main categories (no parentCategory)
   const mainCategories = categories.filter(cat => !cat.parentCategory).slice(0, 6);
@@ -117,7 +110,7 @@ const Home = () => {
   useEffect(() => {
     productAPI.getDiscoverProducts().then(res => setDiscoverProducts(res.data)).catch(() => setDiscoverProducts([]));
     productAPI.getRecommendedProducts().then(res => setRecommendedProducts(res.data)).catch(() => setRecommendedProducts([]));
-      }, []);
+  }, []);
 
   return (
     <div className="min-h-screen">
@@ -125,9 +118,9 @@ const Home = () => {
       <AdBanner />
       
       {/* Categories Section */}
-      <section className="pt-8 pb-8">
+      <section className="pt-4 pb-16 md:py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center mb-12">
+          <div className="flex justify-between items-center mb-8 md:mb-16">
             <h2 className="text-3xl font-bold text-center w-full md:w-auto">Shop by Category</h2>
             <Link
               to="/categories"
@@ -138,7 +131,7 @@ const Home = () => {
             </Link>
           </div>
           <CategoriesGrid categories={mainCategories} />
-          <div className="flex justify-center mt-4 md:hidden">
+          <div className="flex justify-center mt-2 md:hidden">
             <Link
               to="/categories"
               className="flex items-center text-primary-600 hover:text-primary-700 font-semibold text-lg"
@@ -150,7 +143,7 @@ const Home = () => {
       </section>
 
       {/* Features Section */}
-      <section className="py-16 bg-gray-50">
+      <section className="pt-4 pb-4 md:py-16 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Desktop Grid Layout */}
           <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-4 gap-8">
@@ -202,7 +195,7 @@ const Home = () => {
       </section>
 
       {/* Featured Products Section */}
-      <section className="pt-8 pb-16 bg-gray-50">
+      <section className="pt-4 pb-16 md:py-16 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center mb-12">
             <h2 className="text-3xl font-bold">Featured Products</h2>

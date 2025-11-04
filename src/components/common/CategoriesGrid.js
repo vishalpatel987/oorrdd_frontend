@@ -19,7 +19,7 @@ const categoryImageMap = {
 };
 
 const CategoriesGrid = ({ categories }) => (
-  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
+  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-6">
     {categories.map((category, index) => (
       category && category.name ? (
         <div key={category._id || index} className="group">
@@ -27,7 +27,7 @@ const CategoriesGrid = ({ categories }) => (
             to={`/products?category=${category._id}`}
             className="block"
           >
-            <div className="relative bg-gray-100 rounded-lg p-6 text-center hover:bg-primary-50 transition-colors overflow-hidden h-48 flex flex-col justify-end items-center">
+            <div className="relative bg-gray-100 rounded-lg p-2 md:p-6 text-center hover:bg-primary-50 transition-colors overflow-hidden h-28 md:h-48 flex flex-col justify-end items-center">
               <img
                 src={
                   category.image ||
@@ -43,12 +43,12 @@ const CategoriesGrid = ({ categories }) => (
                 className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-110 z-0"
                 style={{ filter: 'brightness(0.7)' }}
               />
-              <div className="relative z-10">
-                <h3 className="font-semibold mb-2 group-hover:text-primary-600 text-white text-lg drop-shadow-lg">
+              <div className="relative z-10 px-1">
+                <h3 className="font-semibold mb-0 md:mb-2 group-hover:text-primary-600 text-white text-xs md:text-lg drop-shadow-lg leading-tight">
                   {category.name || 'Unnamed Category'}
                 </h3>
                 {category.count !== undefined && (
-                  <p className="text-sm text-gray-200 drop-shadow-lg">{category.count} products</p>
+                  <p className="text-xs md:text-sm text-gray-200 drop-shadow-lg mt-0.5 md:mt-0">{category.count} products</p>
                 )}
               </div>
             </div>
@@ -69,7 +69,7 @@ const CategoriesGrid = ({ categories }) => (
           )}
         </div>
       ) : (
-        <div key={index} className="bg-gray-100 rounded-lg h-48 flex items-center justify-center text-gray-400 font-bold">
+        <div key={index} className="bg-gray-100 rounded-lg h-28 md:h-48 flex items-center justify-center text-gray-400 font-bold">
           No Data
         </div>
       )

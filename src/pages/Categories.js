@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import productAPI from '../api/productAPI';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { FaArrowLeft } from 'react-icons/fa';
 
 // Helper to normalize category names for mapping
@@ -47,7 +47,6 @@ const Categories = () => {
   const [loading, setLoading] = useState(true);
   const [selectedMain, setSelectedMain] = useState(null);
   const navigate = useNavigate();
-  const location = useLocation();
 
   useEffect(() => {
     productAPI.getCategories().then(res => {
@@ -110,14 +109,14 @@ const Categories = () => {
         ) : selectedMain ? (
           <>
             {/* Subcategories Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-6">
               {subcategories && subcategories.length > 0 ? subcategories.map((subcat) => (
                 <Link
                   key={subcat._id}
                   to={`/products?category=${subcat._id}`}
                   className="group"
                 >
-                  <div className="relative bg-gray-100 rounded-lg p-6 text-center hover:bg-primary-50 transition-colors overflow-hidden h-48 flex flex-col justify-end items-center">
+                  <div className="relative bg-gray-100 rounded-lg p-2 md:p-6 text-center hover:bg-primary-50 transition-colors overflow-hidden h-28 md:h-48 flex flex-col justify-end items-center">
                     <img
                       src={getCategoryImage(subcat, categories)}
                       alt={subcat.name || 'Subcategory'}
@@ -129,8 +128,8 @@ const Categories = () => {
                       className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-110 z-0"
                       style={{ filter: 'brightness(0.7)' }}
                     />
-                    <div className="relative z-10">
-                      <h3 className="font-semibold mb-2 group-hover:text-primary-600 text-white text-lg drop-shadow-lg">
+                    <div className="relative z-10 px-1">
+                      <h3 className="font-semibold mb-0 md:mb-2 group-hover:text-primary-600 text-white text-xs md:text-lg drop-shadow-lg leading-tight">
                         {subcat.name || 'Unnamed Subcategory'}
                       </h3>
                     </div>
@@ -145,14 +144,14 @@ const Categories = () => {
             </div>
           </>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-6">
             {mainCategories.map((cat) => (
               <button
                 key={cat._id}
                 onClick={() => setSelectedMain(cat._id)}
                 className="group w-full"
               >
-                <div className="relative bg-gray-100 rounded-lg p-6 text-center hover:bg-primary-50 transition-colors overflow-hidden h-48 flex flex-col justify-end items-center">
+                <div className="relative bg-gray-100 rounded-lg p-2 md:p-6 text-center hover:bg-primary-50 transition-colors overflow-hidden h-28 md:h-48 flex flex-col justify-end items-center">
                   <img
                     src={getCategoryImage(cat, categories)}
                     alt={cat.name || 'Category'}
@@ -164,8 +163,8 @@ const Categories = () => {
                     className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-110 z-0"
                     style={{ filter: 'brightness(0.7)' }}
                   />
-                  <div className="relative z-10">
-                    <h3 className="font-semibold mb-2 group-hover:text-primary-600 text-white text-lg drop-shadow-lg">
+                  <div className="relative z-10 px-1">
+                    <h3 className="font-semibold mb-0 md:mb-2 group-hover:text-primary-600 text-white text-xs md:text-lg drop-shadow-lg leading-tight">
                       {cat.name || 'Unnamed Category'}
                     </h3>
                   </div>

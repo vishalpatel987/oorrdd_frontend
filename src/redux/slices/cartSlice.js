@@ -61,6 +61,7 @@ const initialState = {
   total: 0,
   itemCount: 0,
   loading: false,
+  updating: false, // Separate state for quantity updates to avoid showing full page spinner
   error: null,
 };
 
@@ -138,19 +139,37 @@ const cartSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
-      .addCase(updateCartQuantityAsync.pending, (state) => {
-        state.loading = true;
+            .addCase(updateCartQuantityAsync.pending, (state, action) => {
+        state.updating = true;
         state.error = null;
+        // Optimistic update - update quantity immediately for instant UI feedback
+        const { productId, quantity } = action.meta.arg;
+        const itemIndex = state.items.findIndex(item => item.product?._id === productId || item.product?.toString() === productId);
+        if (itemIndex !== -1) {
+          if (quantity <= 0) {
+            // Remove item if quantity is 0 or less
+            state.items = state.items.filter(item => (item.product?._id !== productId && item.product?.toString() !== productId));
+          } else {
+            // Update quantity
+            state.items[itemIndex].quantity = quantity;
+          }
+          // Recalculate totals immediately
+          state.itemCount = state.items.reduce((total, item) => total + (item?.quantity ?? 0), 0);
+          state.total = state.items.reduce((total, item) => total + ((item?.product?.price ?? 0) * (item?.quantity ?? 0)), 0);
+        }
       })
       .addCase(updateCartQuantityAsync.fulfilled, (state, action) => {
-        state.loading = false;
-        state.items = (action.payload || []).filter(item => item && item.product && item.quantity > 0);
-        state.itemCount = state.items.reduce((total, item) => total + (item?.quantity ?? 0), 0);
-        state.total = state.items.reduce((total, item) => total + ((item?.product?.price ?? 0) * (item?.quantity ?? 0)), 0);
+        state.updating = false;
+        // Sync with server response to ensure consistency
+        state.items = (action.payload || []).filter(item => item && item.product && item.quantity > 0);                                                         
+        state.itemCount = state.items.reduce((total, item) => total + (item?.quantity ?? 0), 0);                                                                
+        state.total = state.items.reduce((total, item) => total + ((item?.product?.price ?? 0) * (item?.quantity ?? 0)), 0);                                    
       })
       .addCase(updateCartQuantityAsync.rejected, (state, action) => {
-        state.loading = false;
+        state.updating = false;
         state.error = action.payload;
+        // Revert optimistic update on error by refetching cart
+        // The component should handle this by calling fetchCart if needed
       });
   },
 });

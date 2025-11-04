@@ -1,116 +1,57 @@
-import React from 'react';
-
-// Example brand data for different categories
-// NOTE: Removed external logo URLs to prevent 404 errors - logos are handled by getBrandLogo() function
-const brandMap = {
-  Electronics: [
-    { name: 'Samsung' },
-    { name: 'Apple' },
-    { name: 'Sony' },
-    { name: 'OnePlus' },
-    { name: 'Vivo' },
-    { name: 'Oppo' },
-    { name: 'Realme' },
-    { name: 'Xiaomi' },
-    { name: 'Motorola' },
-    { name: 'Nokia' },
-  ],
-  Fashion: [
-    { name: 'Nike' },
-    { name: 'Adidas' },
-    { name: 'Puma' },
-    { name: 'Zara' },
-    { name: 'H&M' },
-    { name: 'Levi\'s' },
-    { name: 'Gucci' },
-    { name: 'Louis Vuitton' },
-  ],
-  Books: [
-    { name: 'Penguin' },
-    { name: 'HarperCollins' },
-    { name: 'Simon & Schuster' },
-    { name: 'Random House' },
-  ],
-  Home: [
-    { name: 'IKEA' },
-    { name: 'Philips' },
-    { name: 'Whirlpool' },
-    { name: 'LG' },
-  ],
-  Sports: [
-    { name: 'Nike' },
-    { name: 'Adidas' },
-    { name: 'Puma' },
-    { name: 'Reebok' },
-  ],
-  Beauty: [
-    { name: 'L\'Oreal' },
-    { name: 'Maybelline' },
-    { name: 'Lakme' },
-    { name: 'Dove' },
-  ],
-  Automotive: [
-    { name: 'Toyota' },
-    { name: 'Honda' },
-    { name: 'Ford' },
-    { name: 'BMW' },
-  ],
-  Food: [
-    { name: 'Nestle' },
-    { name: 'Kellogg\'s' },
-    { name: 'Pepsi' },
-    { name: 'Coca-Cola' },
-  ],
-  Jewelry: [
-    { name: 'Tiffany & Co.' },
-    { name: 'Cartier' },
-    { name: 'Swarovski' },
-    { name: 'Pandora' },
-  ],
-  Pets: [
-    { name: 'Pedigree' },
-    { name: 'Whiskas' },
-    { name: 'Purina' },
-    { name: 'Royal Canin' },
-  ],
-};
+import React, { useState, useEffect } from 'react';
+import brandAPI from '../../api/brandAPI';
 
 const BrandMarquee = ({ category }) => {
-  const normalize = (str) => (str || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
-  const localBrandLogoMap = {
-    samsung: '/images/brands/samsung.svg',
-    apple: '/images/brands/apple.svg',
-    sony: '/images/brands/sony.svg',
-    oneplus: '/images/brands/oneplus.svg',
-    vivo: '/images/brands/vivo.svg',
-    oppo: '/images/brands/oppo.svg',
-    realme: '/images/brands/realme.svg',
-    xiaomi: '/images/brands/xiaomi.svg',
-    motorola: '/images/brands/motorola.svg',
-    nokia: '/images/brands/nokia.svg',
-    nike: '/images/brands/nike.svg',
-    adidas: '/images/brands/adidas.svg',
-    puma: '/images/brands/puma.svg',
-  };
+  const [brands, setBrands] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchBrands = async () => {
+      try {
+        setLoading(true);
+        const params = category ? { category } : {};
+        const response = await brandAPI.getAllBrands(params);
+        
+        if (response.data && response.data.success) {
+          const fetchedBrands = response.data.data || [];
+          setBrands(fetchedBrands);
+        } else {
+          setBrands([]);
+        }
+      } catch (error) {
+        console.error('Error fetching brands:', error);
+        setBrands([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchBrands();
+  }, [category]);
 
   const getBrandLogo = (brand) => {
-    const key = normalize(brand?.name);
-    // Prioritize local logos first to avoid 404 errors
-    if (localBrandLogoMap[key]) {
-      return localBrandLogoMap[key];
+    // Use logo from API if available
+    if (brand?.logo || brand?.logoUrl) {
+      return brand.logo || brand.logoUrl;
     }
-    // Don't use external URLs - they cause 404 errors
-    // Use default logo instead for all brands without local logos
+    // Fallback to default logo
     return '/images/logo.png';
   };
 
-  let brands = [];
-  if (category && brandMap[category]) {
-    brands = brandMap[category];
-  } else {
-    // Show all brands if no category or unknown category
-    brands = Object.values(brandMap).flat();
+  if (loading) {
+    return (
+      <div className="w-full bg-white py-6 overflow-hidden">
+        <div className="flex items-center justify-center">
+          <div className="text-gray-500">Loading brands...</div>
+        </div>
+      </div>
+    );
   }
+
+  if (!brands || brands.length === 0) {
+    return null; // Don't show anything if no brands
+  }
+
   // Duplicate brands for seamless looping
   const marqueeBrands = [...brands, ...brands];
   return (

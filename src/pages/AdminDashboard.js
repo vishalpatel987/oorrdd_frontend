@@ -4,6 +4,7 @@ import { formatINR } from '../utils/formatCurrency';
 import sellerAPI from '../api/sellerAPI';
 import productAPI from '../api/productAPI';
 import bannerAPI from '../api/bannerAPI';
+import brandAPI from '../api/brandAPI';
 import axiosInstance from '../api/axiosConfig';
 import { toast } from 'react-toastify';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar } from 'recharts';
@@ -133,6 +134,23 @@ const AdminDashboard = () => {
     isActive: true
   });
   const [heroBannerError, setHeroBannerError] = useState('');
+
+  // Brand state
+  const [brands, setBrands] = useState([]);
+  const [brandLoading, setBrandLoading] = useState(false);
+  const [brandModal, setBrandModal] = useState({ open: false, brand: null });
+  const [brandForm, setBrandForm] = useState({
+    name: '',
+    logo: null,
+    logoUrl: '',
+    category: 'Other',
+    categories: [],
+    website: '',
+    description: '',
+    sortOrder: 0,
+    isActive: true
+  });
+  const [brandError, setBrandError] = useState('');
 
   // Helpers for event banner
   const toDateTimeLocal = (d) => {
@@ -321,6 +339,23 @@ const AdminDashboard = () => {
       setHeroBanners([]);
     } finally {
       setHeroBannerLoading(false);
+    }
+  };
+
+  const fetchBrands = async () => {
+    setBrandLoading(true);
+    try {
+      const response = await brandAPI.getBrands();
+      if (response.data.success && response.data.data) {
+        setBrands(Array.isArray(response.data.data) ? response.data.data : []);
+      } else {
+        setBrands([]);
+      }
+    } catch (error) {
+      console.error('Error fetching brands:', error);
+      setBrands([]);
+    } finally {
+      setBrandLoading(false);
     }
   };
 
@@ -599,6 +634,9 @@ const AdminDashboard = () => {
     }
     if (activeTab === 'hero-banner') {
       fetchHeroBanners();
+    }
+    if (activeTab === 'brands') {
+      fetchBrands();
     }
   }, [activeTab]);
 
@@ -1100,6 +1138,18 @@ const AdminDashboard = () => {
   // Event Banner functions
   const handleEventFormChange = (e) => {
     const { name, value } = e.target;
+    
+    // Word count validation for description (max 20 words)
+    if (name === 'description') {
+      const words = value.trim().split(/\s+/).filter(word => word.length > 0);
+      if (words.length > 20) {
+        setEventError('Description cannot exceed 20 words');
+        return; // Don't update if exceeds limit
+      } else {
+        setEventError(''); // Clear error if within limit
+      }
+    }
+    
     setEventForm({ ...eventForm, [name]: value });
   };
 
@@ -1218,16 +1268,146 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleEventFormSubmit = async (e) => {
+  // Brand handlers
+  const handleOpenBrandModal = (brand = null) => {
+    setBrandForm(brand ? {
+      name: brand.name || '',
+      logo: null,
+      logoUrl: brand.logo || brand.logoUrl || '',
+      category: brand.category || 'Other',
+      categories: brand.categories || [],
+      website: brand.website || '',
+      description: brand.description || '',
+      sortOrder: brand.sortOrder || 0,
+      isActive: brand.isActive !== undefined ? brand.isActive : true
+    } : {
+      name: '',
+      logo: null,
+      logoUrl: '',
+      category: 'Other',
+      categories: [],
+      website: '',
+      description: '',
+      sortOrder: 0,
+      isActive: true
+    });
+    setBrandModal({ open: true, brand });
+    setBrandError('');
+  };
+
+  const handleBrandFormChange = (e) => {
+    const { name, value, files, type, checked } = e.target;
+    if (name === 'logo') {
+      setBrandForm({ ...brandForm, [name]: files[0] });
+    } else if (name === 'categories') {
+      const selectedOptions = Array.from(e.target.selectedOptions, option => option.value);
+      setBrandForm({ ...brandForm, [name]: selectedOptions });
+    } else if (type === 'checkbox') {
+      setBrandForm({ ...brandForm, [name]: checked });
+    } else {
+      setBrandForm({ ...brandForm, [name]: value });
+    }
+  };
+
+  const handleBrandFormSubmit = async (e) => {
     e.preventDefault();
-    setEventError('');
-    setEventLoading(true);
+    setBrandError('');
+    setBrandLoading(true);
+
     try {
-      if (eventEditId) {
-        await productAPI.updateEventBanner(eventEditId, eventForm);
-      } else {
-        await productAPI.createOrUpdateEventBanner(eventForm);
+      const formData = new FormData();
+      
+      if (brandForm.name) formData.append('name', brandForm.name);
+      if (brandForm.logo && brandForm.logo instanceof File) {
+        formData.append('logo', brandForm.logo);
+      } else if (brandForm.logoUrl) {
+        formData.append('logoUrl', brandForm.logoUrl);
       }
+      if (brandForm.category) formData.append('category', brandForm.category);
+      if (brandForm.categories && brandForm.categories.length > 0) {
+        formData.append('categories', JSON.stringify(brandForm.categories));
+      }
+      if (brandForm.website) formData.append('website', brandForm.website);
+      if (brandForm.description) formData.append('description', brandForm.description);
+      formData.append('sortOrder', brandForm.sortOrder || 0);
+      formData.append('isActive', brandForm.isActive);
+
+      if (brandModal.brand) {
+        await brandAPI.updateBrand(brandModal.brand._id, formData);
+        toast.success('Brand updated successfully');
+      } else {
+        await brandAPI.createBrand(formData);
+        toast.success('Brand created successfully');
+      }
+
+      await fetchBrands();
+      setBrandModal({ open: false, brand: null });
+      setBrandForm({
+        name: '',
+        logo: null,
+        logoUrl: '',
+        category: 'Other',
+        categories: [],
+        website: '',
+        description: '',
+        sortOrder: 0,
+        isActive: true
+      });
+      setBrandError('');
+    } catch (error) {
+      console.error('Error submitting brand form:', error);
+      const errorMessage = error.response?.data?.message ||
+                          error.response?.data?.error ||
+                          error.message ||
+                          'Failed to save brand';
+      setBrandError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setBrandLoading(false);
+    }
+  };
+
+  const handleDeleteBrand = async (brandId, brandName) => {
+    if (!window.confirm(`Are you sure you want to delete brand "${brandName || 'this brand'}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    setBrandLoading(true);
+    try {
+      await brandAPI.deleteBrand(brandId);
+      toast.success('Brand deleted successfully');
+      await fetchBrands();
+    } catch (error) {
+      console.error('Delete brand error:', error);
+      const errorMessage = error.response?.data?.message ||
+                          error.response?.data?.error ||
+                          error.message ||
+                          'Failed to delete brand';
+      toast.error(errorMessage);
+    } finally {
+      setBrandLoading(false);
+    }
+  };
+
+    const handleEventFormSubmit = async (e) => {
+      e.preventDefault();
+      setEventError('');
+      
+      // Validate word count before submission
+      const wordCount = getWordCount(eventForm.description);
+      if (wordCount > 20) {
+        setEventError('Description cannot exceed 20 words');
+        setEventLoading(false);
+        return;
+      }
+      
+      setEventLoading(true);
+      try {
+        if (eventEditId) {
+          await productAPI.updateEventBanner(eventEditId, eventForm);
+        } else {
+          await productAPI.createOrUpdateEventBanner(eventForm);
+        }
       setEventForm({ title: '', description: '', endDate: '', product: '' });
       setEventEditId('');
       fetchEventBanners();
@@ -1236,6 +1416,12 @@ const AdminDashboard = () => {
     } finally {
       setEventLoading(false);
     }
+  };
+
+  // Helper function to count words
+  const getWordCount = (text) => {
+    if (!text || !text.trim()) return 0;
+    return text.trim().split(/\s+/).filter(word => word.length > 0).length;
   };
 
   return (
@@ -1381,6 +1567,16 @@ const AdminDashboard = () => {
               }`}
             >
               Hero Banner
+            </button>
+            <button
+              onClick={() => setActiveTab('brands')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'brands'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Brands
             </button>
             <button
               onClick={() => setActiveTab('wallet')}
@@ -3096,6 +3292,246 @@ const AdminDashboard = () => {
             </div>
           )}
 
+          {/* Brands Tab */}
+          {activeTab === 'brands' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold text-gray-800">Brand Management</h3>
+                <button
+                  onClick={() => handleOpenBrandModal()}
+                  className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center gap-2"
+                >
+                  <FaPlus />
+                  Add Brand
+                </button>
+              </div>
+
+              {/* Brands List */}
+              <div className="bg-white rounded-lg shadow-md p-6">
+                <h4 className="text-md font-semibold mb-4">Brands</h4>
+                {brandLoading ? (
+                  <div className="text-center py-8">
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  </div>
+                ) : brands.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">No brands found. Add your first brand!</div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {brands.map((brand) => (
+                      <div key={brand._id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                        <div className="flex items-center justify-center mb-3">
+                          <img
+                            src={brand.logo || brand.logoUrl}
+                            alt={brand.name}
+                            className="h-16 w-16 object-contain"
+                            onError={(e) => {
+                              e.target.src = '/images/logo.png';
+                            }}
+                          />
+                        </div>
+                        <h5 className="font-semibold text-center mb-1">{brand.name}</h5>
+                        <p className="text-xs text-gray-500 text-center mb-2">{brand.category}</p>
+                        <div className="flex items-center justify-center gap-2 mt-3">
+                          <span className={`px-2 py-1 text-xs rounded ${
+                            brand.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+                          }`}>
+                            {brand.isActive ? 'Active' : 'Inactive'}
+                          </span>
+                        </div>
+                        <div className="flex justify-center gap-2 mt-3">
+                          <button
+                            onClick={() => handleOpenBrandModal(brand)}
+                            className="text-blue-600 hover:text-blue-800 p-1"
+                            title="Edit"
+                          >
+                            <FaEdit />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteBrand(brand._id, brand.name)}
+                            className="text-red-600 hover:text-red-800 p-1"
+                            title="Delete"
+                          >
+                            <FaTrash />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Brand Modal */}
+              {brandModal.open && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                  <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+                    <h2 className="text-2xl font-bold mb-4">
+                      {brandModal.brand ? 'Edit Brand' : 'Add Brand'}
+                    </h2>
+                    {brandError && (
+                      <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+                        {brandError}
+                      </div>
+                    )}
+                    <form onSubmit={handleBrandFormSubmit} className="space-y-4">
+                      <div>
+                        <label className="block font-medium mb-1">Brand Name *</label>
+                        <input
+                          type="text"
+                          name="name"
+                          value={brandForm.name}
+                          onChange={handleBrandFormChange}
+                          className="form-input w-full"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-medium mb-1">Brand Logo *</label>
+                        <input
+                          type="file"
+                          name="logo"
+                          accept="image/*"
+                          onChange={handleBrandFormChange}
+                          className="form-input w-full"
+                        />
+                        {brandForm.logoUrl && !brandForm.logo && (
+                          <div className="mt-2">
+                            <p className="text-sm text-gray-600 mb-1">Current Logo:</p>
+                            <img src={brandForm.logoUrl} alt="Brand logo" className="h-20 w-20 object-contain border border-gray-200 rounded" />
+                          </div>
+                        )}
+                        <p className="text-sm text-gray-500 mt-1">Or paste image URL:</p>
+                        <input
+                          type="url"
+                          name="logoUrl"
+                          value={brandForm.logoUrl}
+                          onChange={handleBrandFormChange}
+                          placeholder="https://example.com/logo.png"
+                          className="form-input w-full mt-1"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-medium mb-1">Category</label>
+                        <select
+                          name="category"
+                          value={brandForm.category}
+                          onChange={handleBrandFormChange}
+                          className="form-input w-full"
+                        >
+                          <option value="Electronics">Electronics</option>
+                          <option value="Fashion">Fashion</option>
+                          <option value="Books">Books</option>
+                          <option value="Home">Home</option>
+                          <option value="Sports">Sports</option>
+                          <option value="Beauty">Beauty</option>
+                          <option value="Automotive">Automotive</option>
+                          <option value="Food">Food</option>
+                          <option value="Jewelry">Jewelry</option>
+                          <option value="Pets">Pets</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block font-medium mb-1">Additional Categories (Optional)</label>
+                        <select
+                          name="categories"
+                          multiple
+                          value={brandForm.categories}
+                          onChange={handleBrandFormChange}
+                          className="form-input w-full h-24"
+                        >
+                          <option value="Electronics">Electronics</option>
+                          <option value="Fashion">Fashion</option>
+                          <option value="Books">Books</option>
+                          <option value="Home">Home</option>
+                          <option value="Sports">Sports</option>
+                          <option value="Beauty">Beauty</option>
+                          <option value="Automotive">Automotive</option>
+                          <option value="Food">Food</option>
+                          <option value="Jewelry">Jewelry</option>
+                          <option value="Pets">Pets</option>
+                          <option value="Other">Other</option>
+                        </select>
+                        <p className="text-sm text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple</p>
+                      </div>
+
+                      <div>
+                        <label className="block font-medium mb-1">Website (Optional)</label>
+                        <input
+                          type="url"
+                          name="website"
+                          value={brandForm.website}
+                          onChange={handleBrandFormChange}
+                          placeholder="https://example.com"
+                          className="form-input w-full"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-medium mb-1">Description (Optional)</label>
+                        <textarea
+                          name="description"
+                          value={brandForm.description}
+                          onChange={handleBrandFormChange}
+                          rows="3"
+                          className="form-input w-full"
+                          maxLength="500"
+                        />
+                        <p className="text-sm text-gray-500 mt-1">{brandForm.description.length}/500 characters</p>
+                      </div>
+
+                      <div>
+                        <label className="block font-medium mb-1">Sort Order</label>
+                        <input
+                          type="number"
+                          name="sortOrder"
+                          value={brandForm.sortOrder}
+                          onChange={handleBrandFormChange}
+                          className="form-input w-full"
+                          min="0"
+                        />
+                        <p className="text-sm text-gray-500 mt-1">Lower numbers appear first</p>
+                      </div>
+
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          name="isActive"
+                          checked={brandForm.isActive}
+                          onChange={handleBrandFormChange}
+                          className="mr-2"
+                        />
+                        <label className="font-medium">Active</label>
+                      </div>
+
+                      <div className="flex justify-end gap-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBrandModal({ open: false, brand: null });
+                            setBrandError('');
+                          }}
+                          className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                          disabled={brandLoading}
+                        >
+                          {brandLoading ? 'Saving...' : brandModal.brand ? 'Update' : 'Save'}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Event Banner Tab */}
           {activeTab === 'event-banner' && (
             <div className="space-y-6">
@@ -3111,8 +3547,20 @@ const AdminDashboard = () => {
                   <input type="text" name="title" className="form-input w-full" value={eventForm.title} onChange={handleEventFormChange} required />
                 </div>
                 <div>
-                  <label className="block font-medium mb-1">Event Description</label>
-                  <textarea name="description" className="form-input w-full" value={eventForm.description} onChange={handleEventFormChange} required />
+                  <label className="block font-medium mb-1">Event Description <span className="text-sm text-gray-500">(Max 20 words)</span></label>
+                  <textarea 
+                    name="description" 
+                    className="form-input w-full" 
+                    value={eventForm.description} 
+                    onChange={handleEventFormChange} 
+                    required 
+                    rows="3"
+                  />
+                  <div className="mt-1 text-sm text-gray-600">
+                    Words: <span className={getWordCount(eventForm.description) > 20 ? 'text-red-600 font-semibold' : ''}>
+                      {getWordCount(eventForm.description)}
+                    </span> / 20
+                  </div>
                 </div>
                 <div>
                   <label className="block font-medium mb-1">Event End Date/Time</label>
