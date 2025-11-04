@@ -8,7 +8,20 @@ import { toast } from 'react-toastify';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { translateText } from '../utils/translate';
 
-const SOCKET_URL = process.env.REACT_APP_API_URL?.replace('/api', '') || 'http://localhost:5000';
+// Development/production check for Socket URL
+// In development, always use localhost:5000 (backend server)
+// In production, use REACT_APP_API_URL or default to production backend
+const getSocketUrl = () => {
+  if (process.env.NODE_ENV === 'development') {
+    // Force localhost:5000 in development (override any incorrect env vars)
+    return 'http://localhost:5000';
+  } else {
+    // Production: use env var or default to production backend
+    return process.env.REACT_APP_API_URL?.replace('/api', '') || 'https://oorrdd-backend.onrender.com';
+  }
+};
+
+const SOCKET_URL = getSocketUrl();
 
 // /*
 // .animate-slide-in-right-slow {

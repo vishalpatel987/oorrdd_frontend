@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { FaUsers, FaBox, FaDollarSign, FaChartLine, FaEdit, FaTrash, FaEye, FaPlus, FaStore, FaCheck, FaTimes, FaWallet } from 'react-icons/fa';
 import { formatINR } from '../utils/formatCurrency';
 import sellerAPI from '../api/sellerAPI';
@@ -49,6 +49,9 @@ const AdminDashboard = () => {
   const [selectedVendor, setSelectedVendor] = useState(null);
   const [showVendorModal, setShowVendorModal] = useState(false);
   
+  // Document viewer state
+  const [documentViewer, setDocumentViewer] = useState({ open: false, url: null, name: null });
+  
   // Bulk selection state
   const [selectedProducts, setSelectedProducts] = useState([]);
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
@@ -92,7 +95,8 @@ const AdminDashboard = () => {
   const [topVendors, setTopVendors] = useState([]);
   const [topProducts, setTopProducts] = useState([]);
   const [withdrawTrendPeriod, setWithdrawTrendPeriod] = useState('daily');
-  const [topVendorsPeriod, setTopVendorsPeriod] = useState('daily');
+  const [topVendorsPeriod, setTopVendorsPeriod] = useState('');
+  const [topProductsPeriod, setTopProductsPeriod] = useState('');
 
   const [returnsList, setReturnsList] = useState([]);
   const [returnsLoading, setReturnsLoading] = useState(false);
@@ -424,19 +428,60 @@ const AdminDashboard = () => {
 
   const fetchTopVendors = async () => {
     try {
-      const res = await axiosInstance.get('/admin/reports/top-vendors', { params: { limit: 10, period: topVendorsPeriod } });
-      const data = (res.data || []).map(d => ({ name: d.shopName || (d._id || '').slice(-4), revenue: d.revenue, orders: d.orders }));
+      const res = await axiosInstance.get('/admin/reports/top-vendors', { params: { limit: 10, period: topVendorsPeriod || null } });
+      const rawData = res.data || [];
+      
+      // Map and filter data - ensure all required fields are present
+      const data = rawData
+        .filter(d => d && (d.revenue > 0 || d.orders > 0)) // Only include vendors with revenue/orders
+        .map(d => ({
+          name: d.shopName || 'Unknown Vendor',
+          revenue: Number(d.revenue) || 0,
+          orders: Number(d.orders) || 0
+        }))
+        .filter(d => d.revenue > 0); // Final filter - only vendors with revenue
+      
       setTopVendors(data);
-    } catch (e) { console.error('Error fetching top vendors', e); }
+      
+      // Debug log
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Top Vendors Data:', { rawData, processedData: data, period: topVendorsPeriod });
+      }
+    } catch (e) {
+      console.error('Error fetching top vendors', e);
+      setTopVendors([]); // Set empty array on error
+    }
   };
 
-  const fetchTopProducts = async () => {
+  const fetchTopProducts = useCallback(async () => {
     try {
-      const res = await axiosInstance.get('/admin/reports/top-products', { params: { limit: 10 } });
-      const data = (res.data || []).map(d => ({ name: d.name || (d._id || '').slice(-4), quantity: d.quantity, revenue: d.revenue }));
+      const period = topProductsPeriod || null;
+      const res = await axiosInstance.get('/admin/reports/top-products', { 
+        params: { limit: 10, period } 
+      });
+      const rawData = res.data || [];
+      
+      // Map and filter data - ensure all required fields are present
+      const data = rawData
+        .filter(d => d && (d.quantity > 0 || d.revenue > 0)) // Only include products with sales
+        .map(d => ({
+          name: d.name || 'Unknown Product',
+          quantity: Number(d.quantity) || 0,
+          revenue: Number(d.revenue) || 0
+        }))
+        .filter(d => d.quantity > 0); // Final filter - only products with quantity > 0
+      
       setTopProducts(data);
-    } catch (e) { console.error('Error fetching top products', e); }
-  };
+      
+      // Debug log
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Top Products Data:', { rawData, processedData: data, period });
+      }
+    } catch (e) {
+      console.error('Error fetching top products', e);
+      setTopProducts([]); // Set empty array on error
+    }
+  }, [topProductsPeriod]);
 
   const fetchAdminEarningsSummary = async () => {
     try {
@@ -473,9 +518,9 @@ const AdminDashboard = () => {
     // Reports initial
     fetchSalesReport('daily');
     fetchTopVendors();
-    fetchTopProducts();
+    fetchTopProducts(); // Initial fetch with default period (empty string = all time)
     fetchCancellationRequests();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchSalesReport(salesPeriod);
@@ -526,10 +571,18 @@ const AdminDashboard = () => {
   }, [withdrawTrendPeriod]);
 
   useEffect(() => {
-    if (activeTab === 'wallet' && walletTab === 'overview') {
+    // Fetch top vendors when period changes or when on overview/wallet tab
+    if (activeTab === 'overview' || (activeTab === 'wallet' && walletTab === 'overview')) {
       fetchTopVendors();
     }
-  }, [topVendorsPeriod]);
+  }, [topVendorsPeriod, activeTab, walletTab]);
+
+  useEffect(() => {
+    // Fetch top products when period changes or when on overview tab
+    if (activeTab === 'overview') {
+      fetchTopProducts();
+    }
+  }, [topProductsPeriod, activeTab, fetchTopProducts]);
 
   useEffect(() => {
     if (activeTab === 'wallet' && walletTab === 'admin-earnings') {
@@ -1212,7 +1265,19 @@ const AdminDashboard = () => {
               {/* Top Vendors & Top Products (moved from Wallet → Overview) */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="bg-white rounded-lg shadow-md p-4">
-                  <h3 className="text-lg font-semibold mb-3">Top Vendors</h3>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-semibold">Top Vendors</h3>
+                    <select
+                      value={topVendorsPeriod}
+                      onChange={(e) => setTopVendorsPeriod(e.target.value)}
+                      className="border border-gray-300 text-sm rounded px-2 py-1"
+                    >
+                      <option value="">All Time</option>
+                      <option value="daily">Today</option>
+                      <option value="monthly">Last 30 Days</option>
+                      <option value="yearly">Last Year</option>
+                    </select>
+                  </div>
                   <div style={{ width: '100%', height: 260 }}>
                     <ResponsiveContainer>
                       <BarChart data={topVendors} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
@@ -1229,7 +1294,19 @@ const AdminDashboard = () => {
                   )}
                 </div>
                 <div className="bg-white rounded-lg shadow-md p-4">
-                  <h3 className="text-lg font-semibold mb-3">Top Products</h3>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-semibold">Top Products</h3>
+                    <select
+                      value={topProductsPeriod}
+                      onChange={(e) => setTopProductsPeriod(e.target.value)}
+                      className="border border-gray-300 text-sm rounded px-2 py-1"
+                    >
+                      <option value="">All Time</option>
+                      <option value="daily">Today</option>
+                      <option value="monthly">Last 30 Days</option>
+                      <option value="yearly">Last Year</option>
+                    </select>
+                  </div>
                   <div style={{ width: '100%', height: 260 }}>
                     <ResponsiveContainer>
                       <BarChart data={topProducts} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
@@ -3300,33 +3377,135 @@ const AdminDashboard = () => {
                 <h3 className="text-lg font-semibold text-gray-700 border-b pb-2 mb-4">Uploaded Documents</h3>
                 {selectedVendor.documents && selectedVendor.documents.length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {selectedVendor.documents.map((doc, index) => (
-                      <div key={index} className="border border-gray-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <h4 className="font-medium text-gray-800">{doc.name}</h4>
-                          <span className="text-xs text-gray-500">
-                            {new Date(doc.uploadedAt).toLocaleDateString()}
-                          </span>
+                    {selectedVendor.documents.map((doc, index) => {
+                      // Validate URL - check if it's a valid HTTP/HTTPS URL and not a demo/test URL
+                      const isValidUrl = doc.url && 
+                        typeof doc.url === 'string' &&
+                        (doc.url.startsWith('http://') || doc.url.startsWith('https://')) &&
+                        !doc.url.includes('res.cloudinary.com/demo') && // Exclude demo/test URLs
+                        !doc.url.includes('test-business-license') && // Exclude test files
+                        doc.url.length > 10; // Basic length check
+                      
+                      // Check file type - Cloudinary URLs might not have file extensions
+                      const urlLower = doc.url ? doc.url.toLowerCase() : '';
+                      const isPdf = urlLower.endsWith('.pdf') || 
+                                   urlLower.includes('/pdf/') || 
+                                   urlLower.includes('format=pdf') ||
+                                   (urlLower.includes('cloudinary.com') && doc.type === 'businessLicenseFile'); // Fallback check
+                      const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(urlLower) || 
+                                     urlLower.includes('/image/') ||
+                                     urlLower.includes('format=jpg') ||
+                                     urlLower.includes('format=png');
+                      
+                      return (
+                        <div key={index} className="border border-gray-200 rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="font-medium text-gray-800">{doc.name}</h4>
+                            <span className="text-xs text-gray-500">
+                              {new Date(doc.uploadedAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                          {!isValidUrl && (
+                            <div className="mb-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+                              ⚠️ Invalid or missing document URL
+                            </div>
+                          )}
+                          <div className="flex space-x-2">
+                            {isValidUrl ? (
+                              <>
+                                <button
+                                  onClick={() => {
+                                    if (isPdf || isImage) {
+                                      // Open in viewer modal
+                                      setDocumentViewer({ open: true, url: doc.url, name: doc.name });
+                                    } else {
+                                      // Open in new tab
+                                      window.open(doc.url, '_blank', 'noopener,noreferrer');
+                                    }
+                                  }}
+                                  className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600 transition-colors"
+                                >
+                                  View Document
+                                </button>
+                                <button
+                                  onClick={async (e) => {
+                                    e.preventDefault();
+                                    if (!isValidUrl) {
+                                      toast.error('Document URL is invalid or missing');
+                                      return;
+                                    }
+                                    
+                                    try {
+                                      // Try to fetch as blob first (works with CORS)
+                                      const response = await fetch(doc.url, {
+                                        method: 'GET',
+                                        mode: 'cors',
+                                      });
+                                      
+                                      if (!response.ok) {
+                                        throw new Error('Failed to fetch document');
+                                      }
+                                      
+                                      const blob = await response.blob();
+                                      
+                                      // Create object URL from blob
+                                      const url = window.URL.createObjectURL(blob);
+                                      
+                                      // Create temporary anchor element for download
+                                      const link = document.createElement('a');
+                                      link.href = url;
+                                      link.download = doc.name || 'document';
+                                      link.style.display = 'none';
+                                      document.body.appendChild(link);
+                                      link.click();
+                                      
+                                      // Cleanup after a short delay
+                                      setTimeout(() => {
+                                        document.body.removeChild(link);
+                                        window.URL.revokeObjectURL(url);
+                                      }, 100);
+                                      
+                                      toast.success('Download started');
+                                    } catch (error) {
+                                      console.error('Download error:', error);
+                                      
+                                      // Fallback: Try direct download with download attribute
+                                      // This might work for some browsers even with external URLs
+                                      try {
+                                        const link = document.createElement('a');
+                                        link.href = doc.url;
+                                        link.download = doc.name || 'document';
+                                        link.target = '_blank';
+                                        link.rel = 'noopener noreferrer';
+                                        link.style.display = 'none';
+                                        document.body.appendChild(link);
+                                        link.click();
+                                        
+                                        setTimeout(() => {
+                                          document.body.removeChild(link);
+                                        }, 100);
+                                        
+                                        toast.info('Opening download link. If it opens in browser, use browser\'s download option.');
+                                      } catch (fallbackError) {
+                                        console.error('Fallback download error:', fallbackError);
+                                        toast.error('Failed to download document. Please try right-click and "Save as".');
+                                      }
+                                    }
+                                  }}
+                                  className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600 transition-colors"
+                                >
+                                  Download
+                                </button>
+                              </>
+                            ) : (
+                              <div className="text-xs text-red-600 px-3 py-1">
+                                Document unavailable
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex space-x-2">
-                          <a 
-                            href={doc.url} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600"
-                          >
-                            View Document
-                          </a>
-                          <a 
-                            href={doc.url} 
-                            download
-                            className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600"
-                          >
-                            Download
-                          </a>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="text-center py-8 text-gray-500">
@@ -3389,6 +3568,162 @@ const AdminDashboard = () => {
                   </button>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Document Viewer Modal */}
+      {documentViewer.open && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="text-lg font-semibold text-gray-800">
+                {documentViewer.name || 'Document Viewer'}
+              </h3>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={async () => {
+                    try {
+                      // Fetch the document as blob
+                      const response = await fetch(documentViewer.url, {
+                        method: 'GET',
+                        mode: 'cors',
+                      });
+                      
+                      if (!response.ok) {
+                        throw new Error('Failed to fetch document');
+                      }
+                      
+                      const blob = await response.blob();
+                      
+                      // Create object URL from blob
+                      const url = window.URL.createObjectURL(blob);
+                      
+                      // Create temporary anchor element for download
+                      const link = document.createElement('a');
+                      link.href = url;
+                      link.download = documentViewer.name || 'document';
+                      link.style.display = 'none';
+                      document.body.appendChild(link);
+                      link.click();
+                      
+                      // Cleanup after a short delay
+                      setTimeout(() => {
+                        document.body.removeChild(link);
+                        window.URL.revokeObjectURL(url);
+                      }, 100);
+                      
+                      toast.success('Download started');
+                    } catch (error) {
+                      console.error('Download error:', error);
+                      
+                      // Fallback: Try direct download
+                      try {
+                        const link = document.createElement('a');
+                        link.href = documentViewer.url;
+                        link.download = documentViewer.name || 'document';
+                        link.target = '_blank';
+                        link.rel = 'noopener noreferrer';
+                        link.style.display = 'none';
+                        document.body.appendChild(link);
+                        link.click();
+                        
+                        setTimeout(() => {
+                          document.body.removeChild(link);
+                        }, 100);
+                        
+                        toast.info('Opening download link. If it opens in browser, use browser\'s download option.');
+                      } catch (fallbackError) {
+                        console.error('Fallback download error:', fallbackError);
+                        toast.error('Failed to download document. Please try right-click and "Save as".');
+                      }
+                    }
+                  }}
+                  className="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600 transition-colors"
+                >
+                  Download
+                </button>
+                <button
+                  onClick={() => setDocumentViewer({ open: false, url: null, name: null })}
+                  className="text-gray-500 hover:text-gray-700 text-2xl font-bold"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+            
+            {/* Modal Content */}
+            <div className="flex-1 overflow-auto p-4 bg-gray-50">
+              {documentViewer.url && (
+                <>
+                  {(() => {
+                    const url = documentViewer.url.toLowerCase();
+                    const isPdf = url.endsWith('.pdf') || 
+                                 url.includes('/pdf/') || 
+                                 url.includes('format=pdf') ||
+                                 url.includes('resource_type=raw');
+                    const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(url) || 
+                                   url.includes('/image/') ||
+                                   url.includes('format=jpg') ||
+                                   url.includes('format=png');
+                    
+                    // For Cloudinary PDFs, ensure proper format
+                    let displayUrl = documentViewer.url;
+                    if (url.includes('cloudinary.com') && isPdf) {
+                      // Ensure Cloudinary PDF is served correctly
+                      if (!url.includes('resource_type=raw') && !url.includes('resource_type=auto')) {
+                        // Add resource_type=auto for PDFs
+                        displayUrl = documentViewer.url.includes('?') 
+                          ? `${documentViewer.url}&resource_type=auto`
+                          : `${documentViewer.url}?resource_type=auto`;
+                      }
+                    }
+                    
+                    if (isPdf) {
+                      return (
+                        <iframe
+                          src={displayUrl}
+                          className="w-full h-full min-h-[600px] border-0 rounded"
+                          title={documentViewer.name || 'PDF Document'}
+                          onError={() => {
+                            toast.error('Failed to load document. The file may be missing or corrupted.');
+                          }}
+                        />
+                      );
+                    } else if (isImage) {
+                      return (
+                        <div className="flex items-center justify-center">
+                          <img
+                            src={documentViewer.url}
+                            alt={documentViewer.name || 'Document'}
+                            className="max-w-full max-h-[70vh] object-contain rounded shadow-lg"
+                            onError={() => {
+                              toast.error('Failed to load image. The file may be missing or corrupted.');
+                              setDocumentViewer({ open: false, url: null, name: null });
+                            }}
+                          />
+                        </div>
+                      );
+                    } else {
+                      return (
+                        <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
+                          <p className="text-gray-600 mb-4">This document type cannot be previewed in the browser.</p>
+                          <a
+                            href={documentViewer.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                          >
+                            Open in New Tab
+                          </a>
+                        </div>
+                      );
+                    }
+                  })()}
+                </>
+              )}
             </div>
           </div>
         </div>
