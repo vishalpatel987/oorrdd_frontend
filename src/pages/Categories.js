@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import productAPI from '../api/productAPI';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { FaArrowLeft } from 'react-icons/fa';
 
 // Helper to normalize category names for mapping
 const normalize = name =>
@@ -45,6 +46,8 @@ const Categories = () => {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedMain, setSelectedMain] = useState(null);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     productAPI.getCategories().then(res => {
@@ -57,17 +60,56 @@ const Categories = () => {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   }, []);
 
-  const mainCategories = categories.filter(cat => !cat.parentCategory);
-  const subcategories = selectedMain ? categories.filter(cat => cat.parentCategory === selectedMain) : [];
+  // Filter main categories - those without parentCategory
+  const mainCategories = categories.filter(cat => {
+    const parentId = cat.parentCategory?._id || cat.parentCategory;
+    return !parentId || parentId === null || parentId === '';
+  });
+
+  // Filter subcategories - those with parentCategory matching selectedMain
+  const subcategories = selectedMain ? categories.filter(cat => {
+    const parentId = cat.parentCategory?._id || cat.parentCategory;
+    const selectedMainId = selectedMain?.toString() || selectedMain;
+    const parentIdStr = parentId?.toString() || parentId;
+    return parentIdStr === selectedMainId;
+  }) : [];
 
   return (
     <div className="min-h-screen py-16 bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Back Button - Show only on desktop (hidden on mobile) */}
+        <div className="mb-6 hidden md:block">
+          {selectedMain ? (
+            <button
+              onClick={() => setSelectedMain(null)}
+              className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors font-medium"
+            >
+              <FaArrowLeft className="text-sm" />
+              <span>Back to All Categories</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                // Go back to previous page or home if no history
+                if (window.history.length > 1) {
+                  navigate(-1);
+                } else {
+                  navigate('/');
+                }
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors font-medium"
+            >
+              <FaArrowLeft className="text-sm" />
+              <span>Back</span>
+            </button>
+          )}
+        </div>
         <h2 className="text-3xl font-bold text-center mb-12">{selectedMain ? 'Select a Subcategory' : 'All Categories'}</h2>
         {loading ? (
           <div className="flex justify-center items-center min-h-[200px]">Loading...</div>
         ) : selectedMain ? (
           <>
+            {/* Subcategories Grid */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
               {subcategories && subcategories.length > 0 ? subcategories.map((subcat) => (
                 <Link
@@ -94,7 +136,12 @@ const Categories = () => {
                     </div>
                   </div>
                 </Link>
-              )) : <div className="col-span-full text-center text-gray-500">No subcategories found.</div>}
+              )) : (
+                <div className="col-span-full text-center text-gray-500 py-12">
+                  <p className="text-lg mb-2">No subcategories found.</p>
+                  <p className="text-sm text-gray-400">This category doesn't have any subcategories yet.</p>
+                </div>
+              )}
             </div>
           </>
         ) : (

@@ -379,6 +379,27 @@ const SellerDashboard = () => {
     }
   }, [activeTab]);
 
+  // Auto-refresh wallet data when window gains focus (admin might have updated withdrawal status)
+  useEffect(() => {
+    if (activeTab === 'wallet') {
+      const handleFocus = () => {
+        fetchWalletData();
+      };
+      
+      // Poll wallet data every 30 seconds when wallet tab is active
+      const interval = setInterval(() => {
+        fetchWalletData();
+      }, 30000); // Refresh every 30 seconds
+      
+      window.addEventListener('focus', handleFocus);
+      
+      return () => {
+        window.removeEventListener('focus', handleFocus);
+        clearInterval(interval);
+      };
+    }
+  }, [activeTab]);
+
   // Wallet functions
   const fetchWalletData = async () => {
     setWalletLoading(true);
@@ -386,11 +407,25 @@ const SellerDashboard = () => {
       // Fetch computed wallet overview from backend
       const res = await axiosInstance.get('/sellers/wallet/overview');
       const data = res.data || {};
+      
+      // Ensure values are numbers and calculate available balance if needed
+      const totalEarnings = Number(data.totalEarnings) || 0;
+      const totalWithdrawn = Number(data.totalWithdrawn) || 0;
+      const availableBalance = Number(data.availableBalance) || Math.max(0, totalEarnings - totalWithdrawn);
+      const pendingWithdrawals = Number(data.pendingWithdrawals) || 0;
+      
+      console.log('Wallet Data:', {
+        totalEarnings,
+        totalWithdrawn,
+        availableBalance,
+        calculation: `${totalEarnings} - ${totalWithdrawn} = ${availableBalance}`
+      });
+      
       setWalletData({
-        availableBalance: data.availableBalance || 0,
-        totalEarnings: data.totalEarnings || 0,
-        totalWithdrawn: data.totalWithdrawn || 0,
-        pendingWithdrawals: data.pendingWithdrawals || 0
+        availableBalance,
+        totalEarnings,
+        totalWithdrawn,
+        pendingWithdrawals
       });
 
 
@@ -1760,7 +1795,17 @@ const SellerDashboard = () => {
 
               {/* Withdrawal History Section */}
               <div className="bg-white rounded-lg shadow border p-6">
-                <h3 className="text-lg font-semibold mb-4">Withdrawal History ({withdrawals.length})</h3>
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold">Withdrawal History ({withdrawals.length})</h3>
+                  <button
+                    onClick={fetchWalletData}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm flex items-center gap-2"
+                    disabled={walletLoading}
+                  >
+                    <FaWallet />
+                    {walletLoading ? 'Refreshing...' : 'Refresh'}
+                  </button>
+                </div>
                   <div>
                     
                     {walletLoading ? (

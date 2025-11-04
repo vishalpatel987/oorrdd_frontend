@@ -408,32 +408,53 @@ const AdminDashboard = () => {
   const handleUpdateWithdrawalStatus = async (id, status, transactionId) => {
     try {
       let body = { status };
-      if (status === 'processed') {
+      if (status === 'processed' || status === 'paid') {
         const tx = transactionId !== undefined ? transactionId : window.prompt('Enter transaction/reference ID (optional):', '');
         if (tx) body.transactionId = tx;
       }
       const prevStatus = withdrawalRequests.find(w => w._id === id)?.status;
+      
+      // Check if new status matches current filter
+      const normalizedStatus = status === 'paid' ? 'processed' : status;
+      const normalizedFilter = withdrawalStatusFilter === 'all' ? 'all' : 
+                                withdrawalStatusFilter === 'processed' ? 'processed' : 
+                                withdrawalStatusFilter;
+      
+      // If filter is set and new status doesn't match, we'll keep it visible temporarily
+      // or switch filter to 'all' if needed
+      const shouldSwitchFilter = withdrawalStatusFilter !== 'all' && 
+                                  normalizedStatus !== normalizedFilter && 
+                                  normalizedStatus !== withdrawalStatusFilter;
+      
       await axiosInstance.put(`/withdrawals/admin/${id}/status`, body);
-      // Optimistic update for snappy UX (list)
-      setWithdrawalRequests((prev) => prev.map(w => w._id === id ? { ...w, status: body.status } : w));
-      // Optimistic update for summary counters
-      const wasProcessed = prevStatus === 'processing' || prevStatus === 'processed';
-      const nowProcessed = body.status === 'processing' || body.status === 'processed';
+      
+      // Update summary counters first
+      const wasProcessed = prevStatus === 'processing' || prevStatus === 'processed' || prevStatus === 'paid';
+      const nowProcessed = body.status === 'processing' || body.status === 'processed' || body.status === 'paid';
       const wasPending = prevStatus === 'pending';
       const nowPending = body.status === 'pending';
       const wasApproved = prevStatus === 'approved';
       const nowApproved = body.status === 'approved';
+      
       setWithdrawalSummary((s) => ({
         ...s,
         processedRequests: (s.processedRequests || 0) + (nowProcessed ? 1 : 0) - (wasProcessed ? 1 : 0),
         pendingRequests: (s.pendingRequests || 0) + (nowPending ? 1 : 0) - (wasPending ? 1 : 0),
         approvedRequests: (s.approvedRequests || 0) + (nowApproved ? 1 : 0) - (wasApproved ? 1 : 0),
       }));
+      
+      // If status doesn't match current filter, switch to 'all' to show the request
+      if (shouldSwitchFilter) {
+        setWithdrawalStatusFilter('all');
+      }
+      
       // Refresh list + summary in parallel
       await Promise.all([fetchWithdrawalRequests(), fetchWithdrawalSummary()]);
       toast.success(`Withdrawal ${status} successfully`);
     } catch (e) {
       toast.error(e.response?.data?.message || 'Failed to update status');
+      // Refresh on error to show correct state
+      await Promise.all([fetchWithdrawalRequests(), fetchWithdrawalSummary()]);
     }
   };
 
@@ -609,7 +630,7 @@ const AdminDashboard = () => {
       }, 300);
       return () => clearTimeout(t);
     }
-  }, [withdrawalSearch]);
+  }, [withdrawalSearch, activeTab, walletTab, withdrawalStatusFilter]);
 
   // Period changes
   useEffect(() => {
@@ -1046,7 +1067,7 @@ const AdminDashboard = () => {
       // Add parentCategory (handle empty string as null)
       if (categoryForm.parentCategory && categoryForm.parentCategory !== '' && categoryForm.parentCategory !== 'null') {
         formData.append('parentCategory', categoryForm.parentCategory);
-      }
+        }
 
       if (categoryModal.category) {
         await productAPI.updateCategory(categoryModal.category._id, formData);
@@ -1892,22 +1913,22 @@ const AdminDashboard = () => {
                   <p className="text-sm text-gray-600">
                     {(() => {
                       const filteredCount = products.filter(product => {
-                        const matchesSearch = !productSearch || 
-                          product.name.toLowerCase().includes(productSearch.toLowerCase()) ||
-                          product.brand.toLowerCase().includes(productSearch.toLowerCase()) ||
-                          product.seller?.shopName?.toLowerCase().includes(productSearch.toLowerCase());
-                        
-                        const matchesStatus = !productStatusFilter || 
-                          (productStatusFilter === 'approved' && product.isApproved) ||
-                          (productStatusFilter === 'pending' && !product.isApproved && !product.rejectionReason) ||
-                          (productStatusFilter === 'rejected' && product.rejectionReason);
-                        
-                        const matchesStock = !productStockFilter ||
-                          (productStockFilter === 'in-stock' && product.stock > 10) ||
-                          (productStockFilter === 'low-stock' && product.stock > 0 && product.stock <= 10) ||
-                          (productStockFilter === 'out-of-stock' && product.stock === 0);
-                        
-                        return matchesSearch && matchesStatus && matchesStock;
+                      const matchesSearch = !productSearch || 
+                        product.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+                        product.brand.toLowerCase().includes(productSearch.toLowerCase()) ||
+                        product.seller?.shopName?.toLowerCase().includes(productSearch.toLowerCase());
+                      
+                      const matchesStatus = !productStatusFilter || 
+                        (productStatusFilter === 'approved' && product.isApproved) ||
+                        (productStatusFilter === 'pending' && !product.isApproved && !product.rejectionReason) ||
+                        (productStatusFilter === 'rejected' && product.rejectionReason);
+                      
+                      const matchesStock = !productStockFilter ||
+                        (productStockFilter === 'in-stock' && product.stock > 10) ||
+                        (productStockFilter === 'low-stock' && product.stock > 0 && product.stock <= 10) ||
+                        (productStockFilter === 'out-of-stock' && product.stock === 0);
+                      
+                      return matchesSearch && matchesStatus && matchesStock;
                       }).length;
                       
                       const startIndex = (currentPage - 1) * itemsPerPage + 1;
@@ -2273,7 +2294,7 @@ const AdminDashboard = () => {
             <div>
               <div className="flex justify-between items-center mb-6">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-800">Order Management</h3>
+                <h3 className="text-lg font-semibold text-gray-800">Order Management</h3>
                   <p className="text-sm text-gray-600">
                     {(() => {
                       const startIndex = (ordersPage - 1) * itemsPerPage + 1;
@@ -2373,20 +2394,20 @@ const AdminDashboard = () => {
                       }
 
                       return paginatedOrders.map((order) => (
-                        <tr key={order._id} className="border-b border-gray-100 hover:bg-gray-50">
-                          <td className="py-3 px-4 font-medium text-gray-800">#{order.orderNumber || order._id}</td>
-                          <td className="py-3 px-4 text-gray-600">{order.user?.name}</td>
-                          <td className="py-3 px-4 text-gray-600">{order.seller?.shopName}</td>
-                          <td className="py-3 px-4 font-medium">{formatINR(order.totalPrice)}</td>
-                          <td className="py-3 px-4">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.orderStatus)}`}>{order.orderStatus}</span>
-                          </td>
-                          <td className="py-3 px-4">
-                            <div className="flex space-x-2">
-                              <button className="text-blue-600 hover:text-blue-800" onClick={() => handleViewOrder(order)}><FaEye /></button>
-                            </div>
-                          </td>
-                        </tr>
+                      <tr key={order._id} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="py-3 px-4 font-medium text-gray-800">#{order.orderNumber || order._id}</td>
+                        <td className="py-3 px-4 text-gray-600">{order.user?.name}</td>
+                        <td className="py-3 px-4 text-gray-600">{order.seller?.shopName}</td>
+                        <td className="py-3 px-4 font-medium">{formatINR(order.totalPrice)}</td>
+                        <td className="py-3 px-4">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.orderStatus)}`}>{order.orderStatus}</span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex space-x-2">
+                            <button className="text-blue-600 hover:text-blue-800" onClick={() => handleViewOrder(order)}><FaEye /></button>
+                          </div>
+                        </td>
+                      </tr>
                       ));
                     })()}
                   </tbody>
@@ -2692,17 +2713,17 @@ const AdminDashboard = () => {
                           <h4 className="text-md font-semibold text-gray-700 mb-4">Main Categories</h4>
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {mainCategories.map((category) => (
-                              <div key={category._id} className="bg-white border rounded-lg p-4 hover:shadow-md transition-shadow">
-                                <div className="flex items-center justify-between mb-2">
-                                  <h4 className="font-semibold text-gray-800">{category.name}</h4>
-                                  <div className="flex space-x-1">
-                                    <button
-                                      className="text-blue-600 hover:text-blue-800"
-                                      onClick={() => handleOpenCategoryModal(category)}
+                    <div key={category._id} className="bg-white border rounded-lg p-4 hover:shadow-md transition-shadow">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-semibold text-gray-800">{category.name}</h4>
+                        <div className="flex space-x-1">
+                          <button
+                            className="text-blue-600 hover:text-blue-800"
+                            onClick={() => handleOpenCategoryModal(category)}
                                       title="Edit Category"
-                                    >
-                                      <FaEdit />
-                                    </button>
+                          >
+                            <FaEdit />
+                          </button>
                                     <button
                                       className="text-red-600 hover:text-red-800"
                                       onClick={() => handleDeleteCategory(category._id, category.name)}
@@ -2711,17 +2732,17 @@ const AdminDashboard = () => {
                                     >
                                       <FaTrash />
                                     </button>
-                                  </div>
-                                </div>
-                                <p className="text-sm text-gray-600 mb-2">{category.description}</p>
-                                {category.image && (
-                                  <img src={category.image} alt={category.name} className="w-full h-24 object-cover rounded" />
-                                )}
+                        </div>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-2">{category.description}</p>
+                      {category.image && (
+                        <img src={category.image} alt={category.name} className="w-full h-24 object-cover rounded" />
+                      )}
                                 {/* Show subcategories count */}
                                 {subcategoriesByParent[category._id] && subcategoriesByParent[category._id].length > 0 && (
                                   <div className="mt-2 text-xs text-blue-600">
                                     {subcategoriesByParent[category._id].length} subcategory(ies)
-                                  </div>
+                  </div>
                                 )}
                               </div>
                             ))}
@@ -3437,7 +3458,10 @@ const AdminDashboard = () => {
                     <div className="p-6 border-b border-gray-200 flex items-center justify-between">
                       <h4 className="text-lg font-semibold text-gray-800">Withdrawal Requests ({withdrawalRequests.length})</h4>
                       <button
-                        onClick={fetchWithdrawalRequests}
+                        onClick={async () => {
+                          await Promise.all([fetchWithdrawalRequests(), fetchWithdrawalSummary()]);
+                          toast.success('Refreshed successfully');
+                        }}
                         className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                       >
                         Refresh
@@ -3502,7 +3526,11 @@ const AdminDashboard = () => {
                                   <select
                                     className="border border-gray-300 rounded px-3 py-2 text-sm"
                                     value={(withdrawalEdits[w._id]?.status) || w.status}
-                                    onChange={(e) => setWithdrawalEdits(prev => ({ ...prev, [w._id]: { ...prev[w._id], status: e.target.value } }))}
+                                    onChange={(e) => {
+                                      const newStatus = e.target.value;
+                                      setWithdrawalEdits(prev => ({ ...prev, [w._id]: { ...prev[w._id], status: newStatus } }));
+                                      // Don't auto-hide: let user click Update button first
+                                    }}
                                   >
                                     <option value="pending">pending</option>
                                     <option value="processing">processing</option>
@@ -3511,7 +3539,7 @@ const AdminDashboard = () => {
                                     <option value="rejected">rejected</option>
                                   </select>
                                 </div>
-                                {((withdrawalEdits[w._id]?.status) || w.status) === 'processed' && (
+                                {(((withdrawalEdits[w._id]?.status) || w.status) === 'processed' || ((withdrawalEdits[w._id]?.status) || w.status) === 'paid') && (
                                   <div className="flex-1">
                                     <label className="block text-xs text-gray-500 mb-1">Transaction ID (optional)</label>
                                     <input
@@ -4177,19 +4205,19 @@ const AdminDashboard = () => {
                                      urlLower.includes('format=png');
                       
                       return (
-                        <div key={index} className="border border-gray-200 rounded-lg p-4">
-                          <div className="flex items-center justify-between mb-2">
-                            <h4 className="font-medium text-gray-800">{doc.name}</h4>
-                            <span className="text-xs text-gray-500">
-                              {new Date(doc.uploadedAt).toLocaleDateString()}
-                            </span>
-                          </div>
+                      <div key={index} className="border border-gray-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-medium text-gray-800">{doc.name}</h4>
+                          <span className="text-xs text-gray-500">
+                            {new Date(doc.uploadedAt).toLocaleDateString()}
+                          </span>
+                        </div>
                           {!isValidUrl && (
                             <div className="mb-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
                               ⚠️ Invalid or missing document URL
                             </div>
                           )}
-                          <div className="flex space-x-2">
+                        <div className="flex space-x-2">
                             {isValidUrl ? (
                               <>
                                 <button
@@ -4203,8 +4231,8 @@ const AdminDashboard = () => {
                                     }
                                   }}
                                   className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600 transition-colors"
-                                >
-                                  View Document
+                          >
+                            View Document
                                 </button>
                                 <button
                                   onClick={async (e) => {
@@ -4272,16 +4300,16 @@ const AdminDashboard = () => {
                                     }
                                   }}
                                   className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600 transition-colors"
-                                >
-                                  Download
+                          >
+                            Download
                                 </button>
                               </>
                             ) : (
                               <div className="text-xs text-red-600 px-3 py-1">
                                 Document unavailable
-                              </div>
+                        </div>
                             )}
-                          </div>
+                      </div>
                         </div>
                       );
                     })}

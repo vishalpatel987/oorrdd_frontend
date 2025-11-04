@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { FaSearch, FaShoppingCart, FaHeart } from 'react-icons/fa';
+import { FaSearch, FaShoppingCart, FaHeart, FaArrowLeft } from 'react-icons/fa';
 import { formatINR } from '../utils/formatCurrency';
 import { useDispatch, useSelector } from 'react-redux';
 import { addToCartAsync, loadCart } from '../redux/slices/cartSlice';
@@ -82,17 +82,24 @@ const ProductList = () => {
   // Fetch products (optionally by category)
   useEffect(() => {
     setLoading(true);
-    const fetch = category && category !== 'all'
-      ? productAPI.getProductsByCategory(category)
-      : productAPI.getProducts();
-    fetch.then(res => {
-      setProducts(res.data);
-      setLoading(false);
-      // console.log('Fetched products from API:', res.data);
-    }).catch((err) => {
-      setLoading(false);
-      console.error('Error fetching products:', err);
-    });
+    const fetchProducts = async () => {
+      try {
+        let response;
+        if (category && category !== 'all') {
+          response = await productAPI.getProductsByCategory(category);
+        } else {
+          response = await productAPI.getProducts();
+        }
+        setProducts(response.data || []);
+        setLoading(false);
+      } catch (err) {
+        console.error('Error fetching products:', err);
+        setProducts([]);
+        setLoading(false);
+      }
+    };
+    
+    fetchProducts();
   }, [category]);
 
   // Helper to slugify product name
@@ -105,10 +112,21 @@ const ProductList = () => {
 
   const filteredProducts = products.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory =
-      category === 'all' ||
-      String(product.category) === String(category) ||
-      (product.subCategory && String(product.subCategory) === String(category));
+    
+    // Category matching - check both main category and subcategory
+    let matchesCategory = true;
+    if (category !== 'all') {
+      const productCategoryId = product.category?._id?.toString() || product.category?.toString() || product.category;
+      const productSubCategoryId = product.subCategory?._id?.toString() || product.subCategory?.toString() || product.subCategory;
+      const selectedCategoryId = category?.toString() || category;
+      
+      matchesCategory = 
+        productCategoryId === selectedCategoryId ||
+        productSubCategoryId === selectedCategoryId ||
+        String(product.category) === String(category) ||
+        String(product.subCategory) === String(category);
+    }
+    
     return matchesSearch && matchesCategory;
   });
   // console.log('Filtered products:', filteredProducts);
@@ -167,6 +185,35 @@ const ProductList = () => {
     <div className="w-full max-w-7xl mx-auto px-4 sm:px-8 lg:px-12 py-6">
       {/* Header */}
       <div className="mb-8">
+        <div className="flex items-center justify-between mb-4 hidden md:flex">
+          <div className="flex items-center gap-4">
+            {/* Back Button - Show only on desktop when category is selected or on filtered view */}
+            {(category !== 'all' || location.search.includes('category=')) && (
+              <button
+                onClick={() => {
+                  // Check if we came from categories page or use browser history
+                  const referrer = document.referrer;
+                  const currentUrl = window.location.href;
+                  
+                  // If referrer is from categories page, go back to categories
+                  if (referrer && (referrer.includes('/categories') || referrer.includes('localhost:3000/categories'))) {
+                    navigate('/categories');
+                  } else if (window.history.length > 1) {
+                    // Use browser history to go back to previous page
+                    window.history.back();
+                  } else {
+                    // Fallback: navigate to home page
+                    navigate('/');
+                  }
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors font-medium"
+              >
+                <FaArrowLeft className="text-sm" />
+                <span>Back</span>
+              </button>
+            )}
+          </div>
+        </div>
         <h1 className="text-3xl font-bold text-gray-800 mb-2">Our Products</h1>
         <p className="text-gray-600">Discover amazing products at great prices</p>
       </div>
@@ -192,20 +239,41 @@ const ProductList = () => {
           <div className="md:w-48">
             <select
               value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              onChange={(e) => {
+                const selectedCategory = e.target.value;
+                setCategory(selectedCategory);
+                // Update URL with category query param
+                const params = new URLSearchParams(location.search);
+                if (selectedCategory === 'all') {
+                  params.delete('category');
+                } else {
+                  params.set('category', selectedCategory);
+                }
+                navigate({ search: params.toString() });
+              }}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer"
             >
               <option value="all">All Categories</option>
-              {categories.filter(cat => !cat.parentCategory).map(main => (
-                <React.Fragment key={main._id}>
-                  <option disabled style={{ fontWeight: 'bold', background: '#f3f4f6' }}>{main.name}</option>
-                  {categories.filter(sub => sub.parentCategory === main._id).map(sub => (
-                    <option key={sub._id} value={sub._id} style={{ paddingLeft: 20 }}>
-                      &nbsp;&nbsp;› {sub.name}
-                    </option>
-                  ))}
-                </React.Fragment>
-              ))}
+              {categories
+                .filter(cat => !cat.parentCategory || cat.parentCategory === null || cat.parentCategory === '')
+                .map(main => {
+                  const subcategories = categories.filter(sub => {
+                    const parentId = sub.parentCategory?._id || sub.parentCategory;
+                    const mainId = main._id?.toString() || main._id;
+                    return parentId?.toString() === mainId;
+                  });
+                  
+                  return (
+                    <React.Fragment key={main._id}>
+                      <option value={main._id} style={{ fontWeight: 'bold', background: '#f3f4f6' }}>{main.name}</option>
+                      {subcategories.map(sub => (
+                        <option key={sub._id} value={sub._id} style={{ paddingLeft: 20 }}>
+                          &nbsp;&nbsp;› {sub.name}
+                        </option>
+                      ))}
+                    </React.Fragment>
+                  );
+                })}
             </select>
           </div>
 
