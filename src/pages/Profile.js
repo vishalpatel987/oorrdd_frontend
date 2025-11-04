@@ -130,18 +130,48 @@ const Profile = () => {
     if (!selectedOrder) return;
     setCancelLoading(true);
     setCancelError('');
+    
+    // Optimistic update - update UI immediately
+    const orderId = selectedOrder._id || selectedOrder.orderNumber;
+    setOrders(prevOrders => 
+      prevOrders.map(order => 
+        (order._id === orderId || order.orderNumber === orderId)
+          ? { ...order, cancellationRequested: true, cancellationRequestReason: cancelReason }
+          : order
+      )
+    );
+    
+    // Close modals immediately for better UX
+    setShowCancelReasonModal(false);
+    setShowOrderModal(false);
+    
     try {
       const idForCancel = selectedOrder.orderNumber || selectedOrder._id;
       await orderAPI.requestCancelOrder(idForCancel, cancelReason);
       setCancelLoading(false);
-      setShowCancelReasonModal(false);
-      setShowOrderModal(false);
-      // refresh orders to show requested flag
-      const res = await orderAPI.getOrders();
-      setOrders(res.data.orders || []);
+      // Optionally refresh orders in background to ensure sync
+      setTimeout(async () => {
+        try {
+          const res = await orderAPI.getOrders();
+          setOrders(res.data.orders || []);
+        } catch (e) {
+          // Silent fail - optimistic update already done
+          console.error('Background refresh failed:', e);
+        }
+      }, 1000);
     } catch (err) {
       setCancelError(err.response?.data?.message || 'Failed to request cancellation');
       setCancelLoading(false);
+      // Revert optimistic update on error
+      setOrders(prevOrders => 
+        prevOrders.map(order => 
+          (order._id === orderId || order.orderNumber === orderId)
+            ? { ...order, cancellationRequested: false, cancellationRequestReason: '' }
+            : order
+        )
+      );
+      // Reopen modal to show error
+      setShowCancelReasonModal(true);
     }
   };
 
