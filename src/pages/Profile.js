@@ -85,6 +85,28 @@ const Profile = () => {
     if (user) fetchMyReturnRequests();
   }, [user]);
 
+  // Reset return form when modal opens or order changes
+  useEffect(() => {
+    if (returnModal.open && returnModal.order) {
+      setReturnForm({
+        type: 'return',
+        reasonCategory: 'defective',
+        reasonText: '',
+        refundDetails: {
+          mode: 'upi',
+          upiId: '',
+          bank: {
+            accountHolderName: '',
+            bankName: '',
+            accountNumber: '',
+            ifscCode: ''
+          },
+          walletId: ''
+        }
+      });
+    }
+  }, [returnModal.open, returnModal.order?._id]);
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setProfileData(prev => ({
@@ -594,6 +616,19 @@ const Profile = () => {
                   {selectedOrder.cancellationRequested && selectedOrder.orderStatus !== 'cancelled' && (
                     <div className="text-yellow-600 text-sm mb-3">Cancellation requested. Awaiting admin approval.</div>
                   )}
+                  {selectedOrder.cancellationRejectedAt && (
+                    <div className="text-red-600 text-sm mb-3 p-3 bg-red-50 rounded-lg border border-red-200">
+                      <div className="font-semibold mb-1">Cancellation Request Rejected</div>
+                      {selectedOrder.cancellationRejectionReason && (
+                        <div className="text-gray-700 mt-1">
+                          <span className="font-medium">Reason:</span> {selectedOrder.cancellationRejectionReason}
+                        </div>
+                      )}
+                      <div className="text-xs text-gray-500 mt-1">
+                        Rejected on {new Date(selectedOrder.cancellationRejectedAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                  )}
                   {selectedOrder.orderStatus === 'cancelled' && selectedOrder.paymentMethod !== 'cod' && (
                     <>
                       {selectedOrder.refundStatus === 'pending' && (
@@ -605,7 +640,7 @@ const Profile = () => {
                     </>
                   )}
                   {/* Cancel Order Button */}
-                  {['pending', 'confirmed', 'processing'].includes(selectedOrder.orderStatus) && !selectedOrder.cancellationRequested && (
+                  {['pending', 'confirmed', 'processing'].includes(selectedOrder.orderStatus) && !selectedOrder.cancellationRequested && !selectedOrder.cancellationRejectedAt && (
                     <div className="mb-2">
                       <button
                         className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:opacity-50"
@@ -647,7 +682,16 @@ const Profile = () => {
       {returnModal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
           <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg mx-2 relative">
-            <button className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 text-2xl" onClick={() => setReturnModal({ open: false, order: null })}>&times;</button>
+            <button className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 text-2xl" onClick={() => {
+              setReturnModal({ open: false, order: null });
+              // Reset form when closing modal
+              setReturnForm({
+                type: 'return',
+                reasonCategory: 'defective',
+                reasonText: '',
+                refundDetails: { mode: 'upi', upiId: '' }
+              });
+            }}>&times;</button>
             <h3 className="text-lg font-semibold mb-3">Return or Replacement</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
@@ -690,7 +734,16 @@ const Profile = () => {
               )}
             </div>
             <div className="flex justify-end gap-2 mt-4">
-              <button className="px-4 py-2 bg-gray-200 rounded" onClick={() => setReturnModal({ open: false, order: null })}>Close</button>
+              <button className="px-4 py-2 bg-gray-200 rounded" onClick={() => {
+                setReturnModal({ open: false, order: null });
+                // Reset form when closing modal
+                setReturnForm({
+                  type: 'return',
+                  reasonCategory: 'defective',
+                  reasonText: '',
+                  refundDetails: { mode: 'upi', upiId: '' }
+                });
+              }}>Close</button>
               <button
                 className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50"
                 disabled={returnLoading}
@@ -706,6 +759,13 @@ const Profile = () => {
                       refundDetails: returnForm.refundDetails
                     });
                     setReturnModal({ open: false, order: null });
+                    // Reset form after successful submission
+                    setReturnForm({
+                      type: 'return',
+                      reasonCategory: 'defective',
+                      reasonText: '',
+                      refundDetails: { mode: 'upi', upiId: '' }
+                    });
                     // Refresh return requests to hide the button
                     const res = await returnsAPI.getMyReturnRequests();
                     setMyReturnRequests(res.data.requests || []);

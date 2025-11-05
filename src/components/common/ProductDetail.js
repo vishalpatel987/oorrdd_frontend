@@ -218,9 +218,14 @@ const ProductDetail = ({ product, onAddToCart, onBuyNow, onWishlist, onShare }) 
             <span className="text-gray-600 text-sm">{Number(averageFromReviews || 0).toFixed(1)} ({(reviews && reviews.length) || product.numReviews || 0} reviews)</span>
           </div>
           <div className="flex items-end gap-3 mb-2">
-            <span className="text-3xl font-bold text-blue-600">{formatINR(currentVariantData.price)}</span>
+            <div className="flex flex-col">
+              <span className="text-3xl font-bold text-blue-600">{formatINR((currentVariantData.price || 0) * quantity)}</span>
+              {quantity > 1 && (
+                <span className="text-sm text-gray-500">₹{(currentVariantData.price || 0).toFixed(2)} × {quantity}</span>
+              )}
+            </div>
             {currentVariantData.comparePrice > currentVariantData.price && (
-              <span className="text-lg text-gray-500 line-through">{formatINR(currentVariantData.comparePrice)}</span>
+              <span className="text-lg text-gray-500 line-through">{formatINR((currentVariantData.comparePrice || 0) * quantity)}</span>
             )}
             {currentVariantData.comparePrice > currentVariantData.price && (
               <span className="bg-red-100 text-red-800 px-2 py-1 rounded text-xs font-semibold">{Math.round(((currentVariantData.comparePrice - currentVariantData.price) / currentVariantData.comparePrice) * 100)}% OFF</span>

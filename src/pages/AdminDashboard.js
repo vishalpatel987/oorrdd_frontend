@@ -49,6 +49,8 @@ const AdminDashboard = () => {
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [showProductModal, setShowProductModal] = useState(false);
+  const [cancellationRejectModal, setCancellationRejectModal] = useState({ open: false, order: null });
+  const [cancellationRejectReason, setCancellationRejectReason] = useState('');
   
   // Vendor details modal state
   const [selectedVendor, setSelectedVendor] = useState(null);
@@ -506,6 +508,23 @@ const AdminDashboard = () => {
       setCancellationRequests(res.data || []);
     } catch (e) {
       console.error('Error fetching cancellation requests', e);
+    }
+  };
+
+  const handleRejectCancellation = async () => {
+    if (!cancellationRejectModal.order) return;
+    
+    try {
+      const response = await axiosInstance.put(`/admin/orders/${cancellationRejectModal.order._id}/reject-cancel`, {
+        reason: cancellationRejectReason && cancellationRejectReason.trim() ? cancellationRejectReason.trim() : undefined
+      });
+      toast.success(response.data?.message || 'Cancellation request rejected');
+      setCancellationRejectModal({ open: false, order: null });
+      setCancellationRejectReason('');
+      fetchCancellationRequests();
+    } catch (e) {
+      console.error('Reject error:', e);
+      toast.error(e.response?.data?.message || e.message || 'Reject failed');
     }
   };
 
@@ -1815,17 +1834,47 @@ const AdminDashboard = () => {
                               {r.status === 'requested' && (
                                 <>
                                   <button
-                                    className="px-2 py-1 text-xs bg-green-600 text-white rounded"
+                                    className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    disabled={actionLoading === `approve-${r._id}`}
                                     onClick={async () => {
-                                      try { await axiosInstance.put(`/returns/admin/${r._id}/approve`); setReturnsList(prev => prev.map(x => x._id === r._id ? { ...x, status: 'approved' } : x)); } catch (e) { alert(e.response?.data?.message || 'Approve failed'); }
+                                      setActionLoading(`approve-${r._id}`);
+                                      // Optimistic update - update UI immediately
+                                      setReturnsList(prev => prev.map(x => x._id === r._id ? { ...x, status: 'approved' } : x));
+                                      try {
+                                        await axiosInstance.put(`/returns/admin/${r._id}/approve`);
+                                        toast.success('Return request approved successfully');
+                                      } catch (e) {
+                                        // Revert optimistic update on error
+                                        setReturnsList(prev => prev.map(x => x._id === r._id ? { ...x, status: 'requested' } : x));
+                                        toast.error(e.response?.data?.message || 'Approve failed');
+                                      } finally {
+                                        setActionLoading(null);
+                                      }
                                     }}
-                                  >Approve</button>
+                                  >
+                                    {actionLoading === `approve-${r._id}` ? 'Processing...' : 'Approve'}
+                                  </button>
                                   <button
-                                    className="px-2 py-1 text-xs bg-red-600 text-white rounded"
+                                    className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    disabled={actionLoading === `reject-${r._id}`}
                                     onClick={async () => {
-                                      try { await axiosInstance.put(`/returns/admin/${r._id}/reject`); setReturnsList(prev => prev.map(x => x._id === r._id ? { ...x, status: 'rejected' } : x)); } catch (e) { alert(e.response?.data?.message || 'Reject failed'); }
+                                      setActionLoading(`reject-${r._id}`);
+                                      // Optimistic update - update UI immediately
+                                      setReturnsList(prev => prev.map(x => x._id === r._id ? { ...x, status: 'rejected' } : x));
+                                      try {
+                                        await axiosInstance.put(`/returns/admin/${r._id}/reject`);
+                                        toast.success('Return request rejected successfully');
+                                      } catch (e) {
+                                        // Revert optimistic update on error
+                                        setReturnsList(prev => prev.map(x => x._id === r._id ? { ...x, status: 'requested' } : x));
+                                        toast.error(e.response?.data?.message || 'Reject failed');
+                                      } finally {
+                                        setActionLoading(null);
+                                      }
                                     }}
-                                  >Reject</button>
+                                  >
+                                    {actionLoading === `reject-${r._id}` ? 'Processing...' : 'Reject'}
+                                  </button>
                                 </>
                               )}
                             </div>
@@ -2533,18 +2582,24 @@ const AdminDashboard = () => {
                             <td className="py-2 px-2">
                               <div className="flex gap-2">
                                 {o.cancellationRequested && o.orderStatus !== 'cancelled' && (
-                                  <button className="px-3 py-1 bg-red-600 text-white rounded text-xs" onClick={async () => {
-                                    try {
-                                      await axiosInstance.put(`/admin/orders/${o._id}/approve-cancel`);
-                                      toast.success('Cancellation approved');
-                                      fetchCancellationRequests();
-                                    } catch (e) {
-                                      toast.error(e.response?.data?.message || 'Approve failed');
-                                    }
-                                  }}>Approve</button>
+                                  <>
+                                    <button className="px-3 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 transition-colors" onClick={async () => {
+                                      try {
+                                        await axiosInstance.put(`/admin/orders/${o._id}/approve-cancel`);
+                                        toast.success('Cancellation approved');
+                                        fetchCancellationRequests();
+                                      } catch (e) {
+                                        toast.error(e.response?.data?.message || 'Approve failed');
+                                      }
+                                    }}>Approve</button>
+                                    <button className="px-3 py-1 bg-gray-600 text-white rounded text-xs hover:bg-gray-700 transition-colors" onClick={() => {
+                                      setCancellationRejectModal({ open: true, order: o });
+                                      setCancellationRejectReason('');
+                                    }}>Reject</button>
+                                  </>
                                 )}
                                 {o.refundStatus === 'pending' && o.paymentMethod !== 'cod' && (
-                                  <button className="px-3 py-1 bg-blue-600 text-white rounded text-xs" onClick={async () => {
+                                  <button className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors" onClick={async () => {
                                     try {
                                       const res = await axiosInstance.put(`/admin/orders/${o._id}/refund`);
                                       toast.success(res.data?.message || 'Refund processed');
@@ -4979,6 +5034,64 @@ const AdminDashboard = () => {
                   })()}
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancellation Reject Modal */}
+      {cancellationRejectModal.open && cancellationRejectModal.order && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4 relative">
+            <button
+              className="absolute top-3 right-3 text-gray-400 hover:text-gray-600 text-2xl font-bold"
+              onClick={() => {
+                setCancellationRejectModal({ open: false, order: null });
+                setCancellationRejectReason('');
+              }}
+            >
+              &times;
+            </button>
+            <h2 className="text-xl font-bold mb-4 text-gray-800">Reject Cancellation Request</h2>
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-2">
+                <span className="font-semibold">Order:</span> {cancellationRejectModal.order.orderNumber || cancellationRejectModal.order._id}
+              </p>
+              <p className="text-sm text-gray-600 mb-2">
+                <span className="font-semibold">Customer:</span> {cancellationRejectModal.order.user?.name || cancellationRejectModal.order.user?.email || 'N/A'}
+              </p>
+              <p className="text-sm text-gray-600 mb-4">
+                <span className="font-semibold">Original Reason:</span> {cancellationRejectModal.order.cancellationRequestReason || 'Not provided'}
+              </p>
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Rejection Reason <span className="text-gray-500">(This message will be sent to customer and vendor)</span>
+              </label>
+              <textarea
+                className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                rows="4"
+                placeholder="Enter rejection reason (e.g., Order is already processed, Cannot cancel as shipment is prepared, etc.)"
+                value={cancellationRejectReason}
+                onChange={(e) => setCancellationRejectReason(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                onClick={() => {
+                  setCancellationRejectModal({ open: false, order: null });
+                  setCancellationRejectReason('');
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                onClick={handleRejectCancellation}
+              >
+                Reject Cancellation
+              </button>
             </div>
           </div>
         </div>

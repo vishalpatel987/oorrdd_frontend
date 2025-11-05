@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchWishlist, removeFromWishlist } from '../redux/slices/wishlistSlice';
 import { addToCartAsync } from '../redux/slices/cartSlice';
@@ -11,6 +11,7 @@ const Wishlist = () => {
   const navigate = useNavigate();
   const { items: wishlist, loading } = useSelector((state) => state.wishlist);
   const { isAuthenticated } = useSelector((state) => state.auth);
+  const [quantities, setQuantities] = useState({});
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -18,12 +19,54 @@ const Wishlist = () => {
     }
   }, [dispatch, isAuthenticated]);
 
+  // Initialize quantities when wishlist changes
+  useEffect(() => {
+    setQuantities(prev => {
+      const newQuantities = { ...prev };
+      wishlist.forEach((product) => {
+        const productId = product._id || product.id;
+        if (productId && !newQuantities[productId]) {
+          newQuantities[productId] = 1;
+        }
+      });
+      return newQuantities;
+    });
+  }, [wishlist]);
+
   const handleRemove = (productId) => {
     dispatch(removeFromWishlist(productId));
+    // Remove quantity from state
+    setQuantities(prev => {
+      const newQuantities = { ...prev };
+      delete newQuantities[productId];
+      return newQuantities;
+    });
+  };
+
+  const handleQuantityChange = (productId, newQuantity) => {
+    const product = wishlist.find(p => (p._id || p.id) === productId);
+    if (!product) return;
+    
+    const maxStock = product.stock || 999;
+    const minQuantity = 1;
+    
+    if (newQuantity < minQuantity) return;
+    if (newQuantity > maxStock) return;
+    
+    setQuantities(prev => ({
+      ...prev,
+      [productId]: newQuantity
+    }));
   };
 
   const handleAddToCart = (product) => {
-    dispatch(addToCartAsync({ product, quantity: 1 }));
+    const productId = product._id || product.id;
+    const quantity = quantities[productId] || 1;
+    dispatch(addToCartAsync({ product, quantity }));
+  };
+
+  const getQuantity = (productId) => {
+    return quantities[productId] || 1;
   };
 
   if (!isAuthenticated) {
@@ -80,8 +123,27 @@ const Wishlist = () => {
                     {product.name}
                   </h3>
                 </Link>
-                <div className="flex items-center mb-2">
-                  <span className="text-xl font-bold text-blue-600">{formatINR(product.price)}</span>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xl font-bold text-blue-600">
+                    {formatINR((product.price || 0) * getQuantity(product._id || product.id))}
+                  </span>
+                  <div className="flex items-center gap-1 sm:gap-2">
+                    <button
+                      onClick={() => handleQuantityChange(product._id || product.id, getQuantity(product._id || product.id) - 1)}
+                      className="w-7 h-7 sm:w-8 sm:h-8 border border-gray-300 rounded flex items-center justify-center hover:bg-gray-50 text-base"
+                      disabled={getQuantity(product._id || product.id) <= 1}
+                    >
+                      -
+                    </button>
+                    <span className="w-8 sm:w-12 text-center text-sm sm:text-base">{getQuantity(product._id || product.id)}</span>
+                    <button
+                      onClick={() => handleQuantityChange(product._id || product.id, getQuantity(product._id || product.id) + 1)}
+                      className="w-7 h-7 sm:w-8 sm:h-8 border border-gray-300 rounded flex items-center justify-center hover:bg-gray-50 text-base"
+                      disabled={getQuantity(product._id || product.id) >= (product.stock || 999)}
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
                 <div className="flex gap-2 mt-auto">
                   <button

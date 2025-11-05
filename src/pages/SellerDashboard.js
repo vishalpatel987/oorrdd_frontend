@@ -1286,6 +1286,11 @@ const SellerDashboard = () => {
                             {order.cancellationRequested && (
                               <span className="px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700" title={`Reason: ${order.cancellationRequestReason || ''}`}>cancel request</span>
                             )}
+                            {order.cancellationRejectedAt && (
+                              <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700" title={`Rejection Reason: ${order.cancellationRejectionReason || 'Cancellation request rejected'}`}>
+                                cancelled rejected
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td className="py-3 px-4">
