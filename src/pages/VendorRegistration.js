@@ -98,10 +98,23 @@ const VendorRegistration = () => {
 
   const handleFileChange = (e, field) => {
     const file = e.target.files[0];
-    setFormData(prev => ({
-      ...prev,
-      [field]: file
-    }));
+    if (file) {
+      // Check if file is PDF
+      const fileType = file.type;
+      const fileName = file.name.toLowerCase();
+      const isPdf = fileType === 'application/pdf' || fileName.endsWith('.pdf');
+      
+      if (!isPdf) {
+        toast.error('Only PDF files are allowed. Please upload a PDF file.');
+        e.target.value = ''; // Clear the input
+        return;
+      }
+      
+      setFormData(prev => ({
+        ...prev,
+        [field]: file
+      }));
+    }
   };
 
   const nextStep = () => {
@@ -469,67 +482,67 @@ const VendorRegistration = () => {
           <label className="block text-sm font-medium text-gray-700 mb-2">Aadhar Card *</label>
           <input
             type="file"
-            accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/jpg,image/png"
+            accept=".pdf,application/pdf"
             onChange={(e) => handleFileChange(e, 'aadharCardFile')}
             required
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
-          <p className="text-xs text-gray-500 mt-1">Upload your Aadhar Card (front and back in one file)</p>
+          <p className="text-xs text-gray-500 mt-1">Upload your Aadhar Card (front and back in one file) - PDF only</p>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">PAN Card *</label>
           <input
             type="file"
-            accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/jpg,image/png"
+            accept=".pdf,application/pdf"
             onChange={(e) => handleFileChange(e, 'panCardFile')}
             required
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
-          <p className="text-xs text-gray-500 mt-1">Upload your PAN Card</p>
+          <p className="text-xs text-gray-500 mt-1">Upload your PAN Card - PDF only</p>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Business Address Proof *</label>
           <input
             type="file"
-            accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/jpg,image/png"
+            accept=".pdf,application/pdf"
             onChange={(e) => handleFileChange(e, 'businessAddressProofFile')}
             required
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
-          <p className="text-xs text-gray-500 mt-1">Upload proof of business address (utility bill, rent agreement, etc.)</p>
+          <p className="text-xs text-gray-500 mt-1">Upload proof of business address (utility bill, rent agreement, etc.) - PDF only</p>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Business License *</label>
           <input
             type="file"
-            accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/jpg,image/png"
+            accept=".pdf,application/pdf"
             onChange={(e) => handleFileChange(e, 'businessLicenseFile')}
             required
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
-          <p className="text-xs text-gray-500 mt-1">Upload your business license or registration certificate</p>
+          <p className="text-xs text-gray-500 mt-1">Upload your business license or registration certificate - PDF only</p>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">GST Certificate *</label>
           <input
             type="file"
-            accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/jpg,image/png"
+            accept=".pdf,application/pdf"
             onChange={(e) => handleFileChange(e, 'taxCertificateFile')}
             required
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
-          <p className="text-xs text-gray-500 mt-1">Upload your GST certificate</p>
+          <p className="text-xs text-gray-500 mt-1">Upload your GST certificate - PDF only</p>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Bank Statement (Last 3 months) *</label>
           <input
             type="file"
-            accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/jpg,image/png"
+            accept=".pdf,application/pdf"
             onChange={(e) => handleFileChange(e, 'bankStatementFile')}
             required
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
-          <p className="text-xs text-gray-500 mt-1">Upload your business bank statements for verification</p>
+          <p className="text-xs text-gray-500 mt-1">Upload your business bank statements for verification - PDF only</p>
         </div>
       </div>
       

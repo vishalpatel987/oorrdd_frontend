@@ -57,7 +57,7 @@ const AdminDashboard = () => {
   const [showVendorModal, setShowVendorModal] = useState(false);
   
   // Document viewer state
-  const [documentViewer, setDocumentViewer] = useState({ open: false, url: null, name: null });
+  const [documentViewer, setDocumentViewer] = useState({ open: false, url: null, name: null, blobUrl: null });
   
   // Bulk selection state
   const [selectedProducts, setSelectedProducts] = useState([]);
@@ -4566,6 +4566,12 @@ const AdminDashboard = () => {
                 {/* Basic Information */}
                 <div className="space-y-4">
                   <h3 className="text-lg font-semibold text-gray-700 border-b pb-2">Basic Information</h3>
+                  {selectedVendor.userId?.name && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-600">Vendor Name</label>
+                      <p className="text-gray-800">{selectedVendor.userId.name}</p>
+                    </div>
+                  )}
                   <div>
                     <label className="block text-sm font-medium text-gray-600">Shop Name</label>
                     <p className="text-gray-800">{selectedVendor.shopName}</p>
@@ -4580,10 +4586,10 @@ const AdminDashboard = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-600">Business Type</label>
-                    <p className="text-gray-800">{selectedVendor.businessInfo?.businessType || 'N/A'}</p>
+                    <p className="text-gray-800">{selectedVendor.businessInfo?.businessType ? selectedVendor.businessInfo.businessType.charAt(0).toUpperCase() + selectedVendor.businessInfo.businessType.slice(1) : 'N/A'}</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-600">Description</label>
+                    <label className="block text-sm font-medium text-gray-600">Business Description</label>
                     <p className="text-gray-800">{selectedVendor.description || 'N/A'}</p>
                   </div>
                 </div>
@@ -4592,7 +4598,7 @@ const AdminDashboard = () => {
                 <div className="space-y-4">
                   <h3 className="text-lg font-semibold text-gray-700 border-b pb-2">Business Information</h3>
                   <div>
-                    <label className="block text-sm font-medium text-gray-600">Tax ID</label>
+                    <label className="block text-sm font-medium text-gray-600">GST ID</label>
                     <p className="text-gray-800">{selectedVendor.businessInfo?.taxId || 'Not Provided'}</p>
                   </div>
                   <div>
@@ -4601,12 +4607,39 @@ const AdminDashboard = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-600">Website</label>
-                    <p className="text-gray-800">{selectedVendor.website || 'N/A'}</p>
+                    {selectedVendor.website ? (
+                      <a href={selectedVendor.website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                        {selectedVendor.website}
+                      </a>
+                    ) : (
+                      <p className="text-gray-800">N/A</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-600">Commission Rate</label>
-                    <p className="text-gray-800">{selectedVendor.commissionRate || 10}%</p>
+                    <p className="text-gray-800">
+                      {(() => {
+                        // If commissionRate is 10 (old default) or not set, show 7% (new default)
+                        const rate = selectedVendor.commissionRate;
+                        if (!rate || rate === 10) {
+                          return '7%';
+                        }
+                        return `${rate}%`;
+                      })()}
+                    </p>
                   </div>
+                  {selectedVendor.categories && selectedVendor.categories.length > 0 && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-600">Categories</label>
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {selectedVendor.categories.map((cat, idx) => (
+                          <span key={idx} className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">
+                            {cat.name || cat}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Address Information */}
@@ -4697,14 +4730,41 @@ const AdminDashboard = () => {
                       
                       // Check file type - Cloudinary URLs might not have file extensions
                       const urlLower = doc.url ? doc.url.toLowerCase() : '';
+                      const docName = (doc.name || '').toLowerCase();
+                      const docType = (doc.type || '').toLowerCase();
+                      
+                      // Check if document name indicates it's a PDF
+                      const isPdfByName = docName.includes('pdf') || 
+                                         docName.includes('aadhar') || 
+                                         docName.includes('pan') ||
+                                         docName.includes('gst') ||
+                                         docName.includes('certificate') ||
+                                         docName.includes('statement') ||
+                                         docName.includes('license') ||
+                                         docName.includes('proof') ||
+                                         docName.includes('card');
+                      
+                      // Check if document type indicates it's a PDF
+                      const isPdfByType = docType.includes('aadhar') || 
+                                         docType.includes('pan') ||
+                                         docType.includes('gst') ||
+                                         docType.includes('certificate') ||
+                                         docType.includes('statement') ||
+                                         docType.includes('license') ||
+                                         docType.includes('proof');
+                      
                       const isPdf = urlLower.endsWith('.pdf') || 
                                    urlLower.includes('/pdf/') || 
+                                   urlLower.includes('/raw/') ||
                                    urlLower.includes('format=pdf') ||
-                                   (urlLower.includes('cloudinary.com') && doc.type === 'businessLicenseFile'); // Fallback check
-                      const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(urlLower) || 
+                                   urlLower.includes('resource_type=raw') ||
+                                   (urlLower.includes('cloudinary.com') && (isPdfByName || isPdfByType || urlLower.includes('vendor-documents')));
+                      const isImage = (!isPdf) && (
+                                     /\.(jpg|jpeg|png|gif|webp)$/i.test(urlLower) || 
                                      urlLower.includes('/image/') ||
                                      urlLower.includes('format=jpg') ||
-                                     urlLower.includes('format=png');
+                                     urlLower.includes('format=png')
+                                   );
                       
                       return (
                       <div key={index} className="border border-gray-200 rounded-lg p-4">
@@ -4723,10 +4783,55 @@ const AdminDashboard = () => {
                             {isValidUrl ? (
                               <>
                                 <button
-                                  onClick={() => {
+                                  onClick={async () => {
                                     if (isPdf || isImage) {
-                                      // Open in viewer modal
-                                      setDocumentViewer({ open: true, url: doc.url, name: doc.name });
+                                      // For PDFs, fetch via proxy endpoint to get blob URL for inline viewing
+                                      if (isPdf && doc.url.includes('cloudinary.com')) {
+                                        try {
+                                          toast.info('Loading PDF...', { autoClose: 1000 });
+                                          const apiBaseUrl = axiosInstance.defaults.baseURL || 'http://localhost:5000/api';
+                                          const encodedUrl = encodeURIComponent(doc.url);
+                                          // Pass document type and name to backend for proper content-type detection
+                                          const docType = doc.type || '';
+                                          const docName = doc.name || '';
+                                          const proxyUrl = `${apiBaseUrl}/document/view?url=${encodedUrl}&type=${encodeURIComponent(docType)}&name=${encodeURIComponent(docName)}`;
+                                          
+                                          // Fetch PDF as blob
+                                          const response = await fetch(proxyUrl);
+                                          if (!response.ok) {
+                                            throw new Error(`Failed to fetch PDF: ${response.status} ${response.statusText}`);
+                                          }
+                                          
+                                          // Get content type from response
+                                          const contentType = response.headers.get('content-type') || 'application/pdf';
+                                          
+                                          // Force PDF content type even if Cloudinary returns different type
+                                          const blob = await response.blob();
+                                          
+                                          // Create blob with correct PDF type for inline viewing
+                                          const pdfBlob = new Blob([blob], { type: 'application/pdf' });
+                                          const blobUrl = window.URL.createObjectURL(pdfBlob);
+                                          
+                                          console.log('PDF blob created:', { 
+                                            originalType: blob.type, 
+                                            contentType,
+                                            forcedType: 'application/pdf',
+                                            blobUrl 
+                                          });
+                                          
+                                          // Open in viewer modal with blob URL for inline viewing
+                                          setDocumentViewer({ open: true, url: doc.url, name: doc.name, blobUrl });
+                                          toast.success('PDF loaded successfully');
+                                        } catch (error) {
+                                          console.error('Error fetching PDF:', error);
+                                          toast.error('Failed to load PDF. Trying direct URL...');
+                                          // Fallback to direct URL
+                                          setDocumentViewer({ open: true, url: doc.url, name: doc.name, blobUrl: null });
+                                        }
+                                      } else {
+                                        // For images or non-Cloudinary PDFs, use direct URL
+                                        setDocumentViewer({ open: true, url: doc.url, name: doc.name, blobUrl: null });
+                                      }
                                     } else {
                                       // Open in new tab
                                       window.open(doc.url, '_blank', 'noopener,noreferrer');
@@ -4745,6 +4850,57 @@ const AdminDashboard = () => {
                                     }
                                     
                                     try {
+                                      // For PDFs, use backend proxy endpoint for proper download with PDF extension
+                                      if (isPdf && doc.url.includes('cloudinary.com')) {
+                                        try {
+                                          toast.info('Downloading PDF...', { autoClose: 1000 });
+                                          const apiBaseUrl = axiosInstance.defaults.baseURL || 'http://localhost:5000/api';
+                                          const encodedUrl = encodeURIComponent(doc.url);
+                                          const docType = doc.type || '';
+                                          const docName = doc.name || 'document';
+                                          const proxyUrl = `${apiBaseUrl}/document/view?url=${encodedUrl}&type=${encodeURIComponent(docType)}&name=${encodeURIComponent(docName)}`;
+                                          
+                                          // Fetch PDF as blob from proxy endpoint
+                                          const response = await fetch(proxyUrl);
+                                          if (!response.ok) {
+                                            throw new Error(`Failed to fetch PDF: ${response.status} ${response.statusText}`);
+                                          }
+                                          
+                                          // Get blob with forced PDF type
+                                          const blob = await response.blob();
+                                          const pdfBlob = new Blob([blob], { type: 'application/pdf' });
+                                          
+                                          // Create filename with .pdf extension
+                                          let fileName = docName;
+                                          if (!fileName.toLowerCase().endsWith('.pdf')) {
+                                            fileName = fileName + '.pdf';
+                                          }
+                                          
+                                          // Create object URL from blob
+                                          const url = window.URL.createObjectURL(pdfBlob);
+                                          
+                                          // Create temporary anchor element for download
+                                          const link = document.createElement('a');
+                                          link.href = url;
+                                          link.download = fileName;
+                                          link.style.display = 'none';
+                                          document.body.appendChild(link);
+                                          link.click();
+                                          
+                                          // Cleanup after a short delay
+                                          setTimeout(() => {
+                                            document.body.removeChild(link);
+                                            window.URL.revokeObjectURL(url);
+                                          }, 100);
+                                          
+                                          toast.success('PDF download started');
+                                          return;
+                                        } catch (proxyError) {
+                                          console.error('Proxy download error:', proxyError);
+                                          // Fall through to direct download
+                                        }
+                                      }
+                                      
                                       // Try to fetch as blob first (works with CORS)
                                       const response = await fetch(doc.url, {
                                         method: 'GET',
@@ -4757,13 +4913,26 @@ const AdminDashboard = () => {
                                       
                                       const blob = await response.blob();
                                       
+                                      // For PDFs, force PDF type and ensure .pdf extension
+                                      let finalBlob = blob;
+                                      let fileName = doc.name || 'document';
+                                      
+                                      if (isPdf) {
+                                        // Force PDF type even if blob type is wrong
+                                        finalBlob = new Blob([blob], { type: 'application/pdf' });
+                                        // Ensure filename has .pdf extension
+                                        if (!fileName.toLowerCase().endsWith('.pdf')) {
+                                          fileName = fileName + '.pdf';
+                                        }
+                                      }
+                                      
                                       // Create object URL from blob
-                                      const url = window.URL.createObjectURL(blob);
+                                      const url = window.URL.createObjectURL(finalBlob);
                                       
                                       // Create temporary anchor element for download
                                       const link = document.createElement('a');
                                       link.href = url;
-                                      link.download = doc.name || 'document';
+                                      link.download = fileName;
                                       link.style.display = 'none';
                                       document.body.appendChild(link);
                                       link.click();
@@ -4781,9 +4950,15 @@ const AdminDashboard = () => {
                                       // Fallback: Try direct download with download attribute
                                       // This might work for some browsers even with external URLs
                                       try {
+                                        let fileName = doc.name || 'document';
+                                        // Ensure PDF extension for PDFs
+                                        if (isPdf && !fileName.toLowerCase().endsWith('.pdf')) {
+                                          fileName = fileName + '.pdf';
+                                        }
+                                        
                                         const link = document.createElement('a');
                                         link.href = doc.url;
-                                        link.download = doc.name || 'document';
+                                        link.download = fileName;
                                         link.target = '_blank';
                                         link.rel = 'noopener noreferrer';
                                         link.style.display = 'none';
@@ -4955,7 +5130,13 @@ const AdminDashboard = () => {
                   Download
                 </button>
                 <button
-                  onClick={() => setDocumentViewer({ open: false, url: null, name: null })}
+                  onClick={() => {
+                    // Clean up blob URL if it exists
+                    if (documentViewer.blobUrl) {
+                      window.URL.revokeObjectURL(documentViewer.blobUrl);
+                    }
+                    setDocumentViewer({ open: false, url: null, name: null, blobUrl: null });
+                  }}
                   className="text-gray-500 hover:text-gray-700 text-2xl font-bold"
                 >
                   ×
@@ -4969,37 +5150,97 @@ const AdminDashboard = () => {
                 <>
                   {(() => {
                     const url = documentViewer.url.toLowerCase();
+                    // Check document type - PDFs might be in /raw/ or /image/upload in Cloudinary
+                    // Check by document name and URL pattern
+                    const docName = (documentViewer.name || '').toLowerCase();
+                    const isPdfByName = docName.includes('pdf') || 
+                                       docName.includes('aadhar') || 
+                                       docName.includes('pan') ||
+                                       docName.includes('gst') ||
+                                       docName.includes('certificate') ||
+                                       docName.includes('statement') ||
+                                       docName.includes('license') ||
+                                       docName.includes('proof');
                     const isPdf = url.endsWith('.pdf') || 
                                  url.includes('/pdf/') || 
+                                 url.includes('/raw/') ||
                                  url.includes('format=pdf') ||
-                                 url.includes('resource_type=raw');
-                    const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(url) || 
+                                 url.includes('resource_type=raw') ||
+                                 (url.includes('cloudinary.com') && isPdfByName); // Cloudinary PDFs might be in /image/upload
+                    const isImage = (!isPdf) && (
+                                   /\.(jpg|jpeg|png|gif|webp)$/i.test(url) || 
                                    url.includes('/image/') ||
                                    url.includes('format=jpg') ||
-                                   url.includes('format=png');
+                                   url.includes('format=png')
+                                 );
                     
-                    // For Cloudinary PDFs, ensure proper format
+                    // For PDFs, use blob URL if available (for inline viewing), otherwise use proxy endpoint
                     let displayUrl = documentViewer.url;
-                    if (url.includes('cloudinary.com') && isPdf) {
-                      // Ensure Cloudinary PDF is served correctly
-                      if (!url.includes('resource_type=raw') && !url.includes('resource_type=auto')) {
-                        // Add resource_type=auto for PDFs
-                        displayUrl = documentViewer.url.includes('?') 
-                          ? `${documentViewer.url}&resource_type=auto`
-                          : `${documentViewer.url}?resource_type=auto`;
+                    if (isPdf) {
+                      // Priority: blobUrl > proxy endpoint > direct URL
+                      if (documentViewer.blobUrl) {
+                        // Use blob URL for direct inline viewing (best approach)
+                        displayUrl = documentViewer.blobUrl;
+                      } else if (url.includes('cloudinary.com')) {
+                        // Use backend proxy endpoint for proper inline viewing
+                        const apiBaseUrl = axiosInstance.defaults.baseURL || 'http://localhost:5000/api';
+                        const encodedUrl = encodeURIComponent(documentViewer.url);
+                        displayUrl = `${apiBaseUrl}/document/view?url=${encodedUrl}`;
+                      } else {
+                        // For non-Cloudinary PDFs, use direct URL
+                        if (!url.includes('#toolbar=0')) {
+                          displayUrl = `${documentViewer.url}#toolbar=0`;
+                        }
                       }
                     }
                     
                     if (isPdf) {
+                      // Use object tag with iframe fallback for best PDF viewing support
+                      // Blob URLs work best for inline viewing
                       return (
-                        <iframe
-                          src={displayUrl}
-                          className="w-full h-full min-h-[600px] border-0 rounded"
-                          title={documentViewer.name || 'PDF Document'}
-                          onError={() => {
-                            toast.error('Failed to load document. The file may be missing or corrupted.');
-                          }}
-                        />
+                        <div className="w-full h-full min-h-[600px] flex flex-col items-center justify-center bg-gray-100 rounded">
+                          {/* Use object tag for PDF viewing - works best with blob URLs */}
+                          <object
+                            data={displayUrl}
+                            type="application/pdf"
+                            className="w-full h-full min-h-[600px] rounded"
+                            style={{ border: 'none' }}
+                            aria-label={documentViewer.name || 'PDF Document'}
+                          >
+                            {/* Fallback if object doesn't work - use iframe */}
+                            <iframe
+                              src={displayUrl}
+                              className="w-full h-full min-h-[600px] border-0 rounded"
+                              title={documentViewer.name || 'PDF Document'}
+                              style={{ border: 'none' }}
+                              type="application/pdf"
+                            >
+                              {/* Final fallback - download link */}
+                              <div className="flex flex-col items-center justify-center p-8">
+                                <p className="text-gray-600 mb-4">Your browser doesn't support inline PDF viewing.</p>
+                                <a 
+                                  href={displayUrl} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                                >
+                                  Open PDF in New Tab
+                                </a>
+                              </div>
+                            </iframe>
+                          </object>
+                          {/* Info message */}
+                          <div className="mt-2 text-center text-xs text-gray-500">
+                            <p>PDF should open directly. If not, 
+                              <button 
+                                  onClick={() => window.open(displayUrl, '_blank', 'noopener,noreferrer')}
+                                  className="text-blue-600 underline ml-1 hover:text-blue-800"
+                                >
+                                  click here
+                                </button>
+                            </p>
+                          </div>
+                        </div>
                       );
                     } else if (isImage) {
                       return (
