@@ -35,6 +35,9 @@ const VendorRegistration = () => {
     categories: [],
     
     // Documents
+    aadharCardFile: null,
+    panCardFile: null,
+    businessAddressProofFile: null,
     businessLicenseFile: null,
     taxCertificateFile: null,
     bankStatementFile: null
@@ -143,6 +146,15 @@ const VendorRegistration = () => {
       formDataToSend.append('categories', JSON.stringify(formData.categories));
       
       // Add file uploads
+      if (formData.aadharCardFile) {
+        formDataToSend.append('aadharCardFile', formData.aadharCardFile);
+      }
+      if (formData.panCardFile) {
+        formDataToSend.append('panCardFile', formData.panCardFile);
+      }
+      if (formData.businessAddressProofFile) {
+        formDataToSend.append('businessAddressProofFile', formData.businessAddressProofFile);
+      }
       if (formData.businessLicenseFile) {
         formDataToSend.append('businessLicenseFile', formData.businessLicenseFile);
       }
@@ -173,6 +185,9 @@ const VendorRegistration = () => {
         businessLicense: formData.businessLicense,
         categories: formData.categories,
         files: {
+          aadharCardFile: !!formData.aadharCardFile,
+          panCardFile: !!formData.panCardFile,
+          businessAddressProofFile: !!formData.businessAddressProofFile,
           businessLicenseFile: !!formData.businessLicenseFile,
           taxCertificateFile: !!formData.taxCertificateFile,
           bankStatementFile: !!formData.bankStatementFile
@@ -399,7 +414,7 @@ const VendorRegistration = () => {
           <h4 className="text-lg font-semibold text-gray-700 mb-4">Business Details</h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Tax ID *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">GST ID *</label>
               <input
                 type="text"
                 name="taxId"
@@ -407,7 +422,7 @@ const VendorRegistration = () => {
                 onChange={handleInputChange}
                 required
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter your Tax ID"
+                placeholder="Enter your GST ID"
               />
             </div>
             <div>
@@ -451,10 +466,43 @@ const VendorRegistration = () => {
       <h3 className="text-xl font-semibold text-gray-800 mb-4">Business Documents</h3>
       <div className="space-y-4">
         <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Aadhar Card *</label>
+          <input
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/jpg,image/png"
+            onChange={(e) => handleFileChange(e, 'aadharCardFile')}
+            required
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+          <p className="text-xs text-gray-500 mt-1">Upload your Aadhar Card (front and back in one file)</p>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">PAN Card *</label>
+          <input
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/jpg,image/png"
+            onChange={(e) => handleFileChange(e, 'panCardFile')}
+            required
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+          <p className="text-xs text-gray-500 mt-1">Upload your PAN Card</p>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Business Address Proof *</label>
+          <input
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/jpg,image/png"
+            onChange={(e) => handleFileChange(e, 'businessAddressProofFile')}
+            required
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+          <p className="text-xs text-gray-500 mt-1">Upload proof of business address (utility bill, rent agreement, etc.)</p>
+        </div>
+        <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Business License *</label>
           <input
             type="file"
-            accept=".pdf,.jpg,.jpeg,.png"
+            accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/jpg,image/png"
             onChange={(e) => handleFileChange(e, 'businessLicenseFile')}
             required
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -462,21 +510,21 @@ const VendorRegistration = () => {
           <p className="text-xs text-gray-500 mt-1">Upload your business license or registration certificate</p>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Tax Certificate *</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">GST Certificate *</label>
           <input
             type="file"
-            accept=".pdf,.jpg,.jpeg,.png"
+            accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/jpg,image/png"
             onChange={(e) => handleFileChange(e, 'taxCertificateFile')}
             required
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
-          <p className="text-xs text-gray-500 mt-1">Upload your tax identification certificate</p>
+          <p className="text-xs text-gray-500 mt-1">Upload your GST certificate</p>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Bank Statement (Last 3 months) *</label>
           <input
             type="file"
-            accept=".pdf,.jpg,.jpeg,.png"
+            accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/jpg,image/png"
             onChange={(e) => handleFileChange(e, 'bankStatementFile')}
             required
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"

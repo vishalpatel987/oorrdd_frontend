@@ -2128,7 +2128,6 @@ const AdminDashboard = () => {
                       )}
                       <select className="form-input" value={editUserForm.role || ''} onChange={e => setEditUserForm({ ...editUserForm, role: e.target.value })} required>
                         <option value="">Select Role</option>
-                        <option value="admin">Admin</option>
                         <option value="customer">Customer</option>
                         <option value="seller">Seller</option>
                       </select>

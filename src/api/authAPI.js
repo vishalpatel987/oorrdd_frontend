@@ -48,6 +48,14 @@ const authAPI = {
   verifyEmail: (token) => {
     return axiosInstance.get(`/auth/verify-email/${token}`);
   },
+
+  // Admin registration (only if no admin exists)
+  adminRegisterStart: (userData) => {
+    return axiosInstance.post('/auth/admin-register/start', userData);
+  },
+  adminRegisterVerify: (payload) => {
+    return axiosInstance.post('/auth/admin-register/verify', payload); // { email, otp }
+  },
 };
 
 export default authAPI; 

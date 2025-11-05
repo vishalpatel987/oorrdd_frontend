@@ -6,6 +6,7 @@ import Footer from './components/common/Footer';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import AdminRegister from './pages/AdminRegister';
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
 import About from './pages/About';
@@ -110,6 +111,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/admin-register" element={<AdminRegister />} />
             <Route path="/terms" element={<Terms />} />
             <Route path="/privacy" element={<Privacy />} />
             <Route path="/about" element={<About />} />

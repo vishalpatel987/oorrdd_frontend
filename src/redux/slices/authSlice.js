@@ -55,6 +55,32 @@ export const verifyRegistrationOTP = createAsyncThunk(
   }
 );
 
+// Admin registration (only if no admin exists)
+export const adminRegisterStart = createAsyncThunk(
+  'auth/adminRegisterStart',
+  async (userData, { rejectWithValue }) => {
+    try {
+      const response = await authAPI.adminRegisterStart(userData);
+      return response.data; // { message, email }
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to start admin registration');
+    }
+  }
+);
+
+export const verifyAdminRegistrationOTP = createAsyncThunk(
+  'auth/verifyAdminRegistrationOTP',
+  async (payload, { rejectWithValue }) => {
+    try {
+      const response = await authAPI.adminRegisterVerify(payload); // { email, otp }
+      localStorage.setItem('token', response.data.token);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Admin OTP verification failed');
+    }
+  }
+);
+
 export const getCurrentUser = createAsyncThunk(
   'auth/getCurrentUser',
   async (_, { rejectWithValue }) => {
@@ -153,6 +179,35 @@ const authSlice = createSlice({
         state.pendingRegistrationEmail = null;
       })
       .addCase(verifyRegistrationOTP.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      // Admin Register Start (OTP send)
+      .addCase(adminRegisterStart.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(adminRegisterStart.fulfilled, (state, action) => {
+        state.loading = false;
+        state.pendingRegistrationEmail = action.payload.email;
+      })
+      .addCase(adminRegisterStart.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      // Verify Admin Registration OTP
+      .addCase(verifyAdminRegistrationOTP.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(verifyAdminRegistrationOTP.fulfilled, (state, action) => {
+        state.loading = false;
+        state.isAuthenticated = true;
+        state.user = action.payload.user;
+        state.token = action.payload.token;
+        state.pendingRegistrationEmail = null;
+      })
+      .addCase(verifyAdminRegistrationOTP.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
       })
