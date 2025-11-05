@@ -1071,13 +1071,20 @@ const SellerDashboard = () => {
                             required
                           >
                             <option value="">-- Select Main Category --</option>
-                            {categories.filter(cat => !cat.parentCategory).map(cat => (
+                            {categories.filter(cat => {
+                              const parentId = cat.parentCategory?._id || cat.parentCategory;
+                              return !parentId || parentId === null || parentId === '';
+                            }).map(cat => (
                               <option key={cat._id} value={cat._id}>{cat.name}</option>
                             ))}
                           </select>
                           {newProduct.mainCategory && (
                             <div className="flex flex-wrap gap-2 mt-2">
-                              {categories.filter(cat => cat.parentCategory === newProduct.mainCategory).map(subcat => (
+                              {categories.filter(cat => {
+                                const parentId = cat.parentCategory?._id || cat.parentCategory;
+                                const mainId = newProduct.mainCategory;
+                                return parentId && (parentId.toString() === mainId.toString());
+                              }).map(subcat => (
                                 <button
                                   type="button"
                                   key={subcat._id}
@@ -1087,7 +1094,11 @@ const SellerDashboard = () => {
                                   {subcat.name}
                                 </button>
                               ))}
-                              {categories.filter(cat => cat.parentCategory === newProduct.mainCategory).length === 0 && <span className="text-gray-400">No subcategories found.</span>}
+                              {categories.filter(cat => {
+                                const parentId = cat.parentCategory?._id || cat.parentCategory;
+                                const mainId = newProduct.mainCategory;
+                                return parentId && (parentId.toString() === mainId.toString());
+                              }).length === 0 && <span className="text-gray-400">No subcategories found.</span>}
                             </div>
                           )}
                         </div>
