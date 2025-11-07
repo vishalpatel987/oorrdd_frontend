@@ -11,6 +11,12 @@ const promoPhrases = [
   'Exclusive Event!',
 ];
 
+const isEventActive = (event, timestamp = Date.now()) => {
+  if (!event || !event.endDate) return false;
+  const end = new Date(event.endDate).getTime();
+  return Number.isFinite(end) && end > timestamp;
+};
+
 const EventBanner = () => {
   // Support multiple banners
   const [events, setEvents] = useState([]);
@@ -18,19 +24,77 @@ const EventBanner = () => {
   const [promoIndex, setPromoIndex] = useState(0);
   const [fade, setFade] = useState(true);
   const [current, setCurrent] = useState(0);
+  const hasFetchedRef = React.useRef(false);
 
   useEffect(() => {
-    // Try multi banners first; fallback to single if API returns null
-    productAPI.getEventBanners().then(res => {
-      const list = Array.isArray(res.data) ? res.data : [];
-      if (list.length > 0) {
-        setEvents(list.filter(e => e && e.product));
-      } else {
-        productAPI.getEventBanner().then(r => {
-          if (r.data) setEvents([r.data]);
-        });
+    // Prevent duplicate calls from StrictMode double rendering
+    if (hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
+    
+    const fetchEventBanners = async () => {
+      const cacheKey = 'event_banners_cache';
+      const cacheTimeKey = cacheKey + '_time';
+      const now = Date.now();
+      let usedCache = false;
+
+      // Serve cached data immediately (if fresh) but still refresh from API
+      const cachedData = localStorage.getItem(cacheKey);
+      const cacheTime = localStorage.getItem(cacheTimeKey);
+      if (cachedData && cacheTime && (now - parseInt(cacheTime, 10)) < 300000) {
+        try {
+          const cachedEvents = JSON.parse(cachedData);
+          if (Array.isArray(cachedEvents) && cachedEvents.length > 0) {
+            const activeCached = cachedEvents.filter(event => isEventActive(event, now));
+            if (activeCached.length > 0) {
+              setEvents(activeCached);
+              usedCache = true;
+            } else {
+              localStorage.removeItem(cacheKey);
+              localStorage.removeItem(cacheTimeKey);
+            }
+          }
+        } catch (e) {
+          localStorage.removeItem(cacheKey);
+          localStorage.removeItem(cacheTimeKey);
+        }
       }
-    });
+
+      try {
+        const res = await productAPI.getEventBanners();
+        const list = Array.isArray(res.data) ? res.data : [];
+        const filtered = list.filter(e => e && e.product && isEventActive(e, now));
+
+        if (filtered.length > 0) {
+          setEvents(filtered);
+          localStorage.setItem(cacheKey, JSON.stringify(filtered));
+          localStorage.setItem(cacheTimeKey, Date.now().toString());
+          return;
+        }
+
+        // Fallback to single banner endpoint if multi returns empty
+        const r = await productAPI.getEventBanner();
+        if (r.data && isEventActive(r.data, now)) {
+          const single = [r.data];
+          setEvents(single);
+          localStorage.setItem(cacheKey, JSON.stringify(single));
+          localStorage.setItem(cacheTimeKey, Date.now().toString());
+        } else {
+          setEvents([]);
+          localStorage.removeItem(cacheKey);
+          localStorage.removeItem(cacheTimeKey);
+        }
+      } catch (error) {
+        console.error('Error fetching event banners:', error);
+        if (!usedCache) {
+          setEvents([]);
+        }
+      }
+    };
+    
+    // Delay fetch to avoid rate limiting on page load
+    setTimeout(() => {
+      fetchEventBanners();
+    }, 1200);
     // eslint-disable-next-line
   }, []);
 
@@ -39,6 +103,26 @@ const EventBanner = () => {
     const interval = setInterval(() => setNowTs(Date.now()), 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // Remove expired events in real-time
+  useEffect(() => {
+    if (!events || events.length === 0) return;
+    const activeEvents = events.filter(event => isEventActive(event, nowTs));
+    if (activeEvents.length !== events.length) {
+      setEvents(activeEvents);
+      if (current >= activeEvents.length) {
+        setCurrent(0);
+      }
+
+      if (activeEvents.length === 0) {
+        localStorage.removeItem('event_banners_cache');
+        localStorage.removeItem('event_banners_cache_time');
+      } else {
+        localStorage.setItem('event_banners_cache', JSON.stringify(activeEvents));
+        localStorage.setItem('event_banners_cache_time', Date.now().toString());
+      }
+    }
+  }, [events, nowTs, current]);
 
   // Auto-rotate banners every 5 seconds when multiple exist
   useEffect(() => {

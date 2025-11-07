@@ -30,16 +30,34 @@ const Home = () => {
   const { isAuthenticated } = useSelector((state) => state.auth);
   const store = useStore();
 
+  // Stagger API calls to prevent rate limiting
+  // Use ref to prevent duplicate calls from React StrictMode double rendering
+  const hasFetchedRef = React.useRef(false);
+  
   useEffect(() => {
+    // Prevent duplicate calls from StrictMode double rendering
+    if (hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
+    
+    // First batch: Featured products and categories (immediate)
     dispatch(fetchFeaturedProducts());
-    dispatch(fetchProducts());
     productAPI.getCategories().then(res => setCategories(res.data)).catch(() => setCategories([]));
+    
+    // Second batch: All products (after 200ms delay)
+    setTimeout(() => {
+      dispatch(fetchProducts());
+    }, 200);
   }, [dispatch]);
 
-  // Fetch wishlist on mount if authenticated
+  // Fetch wishlist on mount if authenticated (with delay)
+  const hasFetchedWishlistRef = React.useRef(false);
   useEffect(() => {
-    if (isAuthenticated) {
-      dispatch(fetchWishlist());
+    if (isAuthenticated && !hasFetchedWishlistRef.current) {
+      hasFetchedWishlistRef.current = true;
+      // Delay wishlist fetch to avoid rate limiting
+      setTimeout(() => {
+        dispatch(fetchWishlist());
+      }, 400);
     }
   }, [dispatch, isAuthenticated]);
 
@@ -104,12 +122,23 @@ const Home = () => {
   //   mainCategories.forEach(cat => console.log('Category name:', cat.name));
   // }
 
-  // Fetch discover and recommended products from backend
+  // Fetch discover and recommended products from backend (with delays)
   const [discoverProducts, setDiscoverProducts] = useState([]);
   const [recommendedProducts, setRecommendedProducts] = useState([]);
+  const hasFetchedDiscoverRef = React.useRef(false);
   useEffect(() => {
-    productAPI.getDiscoverProducts().then(res => setDiscoverProducts(res.data)).catch(() => setDiscoverProducts([]));
-    productAPI.getRecommendedProducts().then(res => setRecommendedProducts(res.data)).catch(() => setRecommendedProducts([]));
+    // Prevent duplicate calls from StrictMode double rendering
+    if (hasFetchedDiscoverRef.current) return;
+    hasFetchedDiscoverRef.current = true;
+    
+    // Stagger these calls to prevent rate limiting
+    setTimeout(() => {
+      productAPI.getDiscoverProducts().then(res => setDiscoverProducts(res.data)).catch(() => setDiscoverProducts([]));
+    }, 600);
+    
+    setTimeout(() => {
+      productAPI.getRecommendedProducts().then(res => setRecommendedProducts(res.data)).catch(() => setRecommendedProducts([]));
+    }, 800);
   }, []);
 
   return (

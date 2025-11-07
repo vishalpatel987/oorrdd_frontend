@@ -63,8 +63,15 @@ const Header = () => {
     return () => document.removeEventListener('mousedown', handleClick);        
   }, [isUserMenuOpen]);
 
+  // Use ref to prevent duplicate calls from React StrictMode
+  const hasFetchedChatRef = useRef(false);
+  
   useEffect(() => {
     if (!isAuthenticated || !user || !user._id) return;
+    
+    // Prevent duplicate calls from StrictMode double rendering
+    if (hasFetchedChatRef.current) return;
+    hasFetchedChatRef.current = true;
     
     // Fetch unread counts on mount
     const fetchUnreadCounts = async () => {

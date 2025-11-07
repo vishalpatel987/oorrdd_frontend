@@ -68,7 +68,12 @@ const ProductList = () => {
   }, [dispatch, isAuthenticated]);
 
   // Fetch categories from backend
+  const hasFetchedCategoriesRef = React.useRef(false);
   useEffect(() => {
+    // Prevent duplicate calls from StrictMode double rendering
+    if (hasFetchedCategoriesRef.current) return;
+    hasFetchedCategoriesRef.current = true;
+    
     productAPI.getCategories().then(res => setCategories(res.data)).catch(() => setCategories([]));
   }, []);
 
@@ -80,7 +85,12 @@ const ProductList = () => {
   }, [location.search]);
 
   // Fetch products (optionally by category)
+  const lastCategoryRef = React.useRef(null);
   useEffect(() => {
+    // Prevent duplicate calls for same category
+    if (lastCategoryRef.current === category) return;
+    lastCategoryRef.current = category;
+    
     setLoading(true);
     const fetchProducts = async () => {
       try {

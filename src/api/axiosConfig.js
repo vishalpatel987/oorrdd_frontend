@@ -57,6 +57,19 @@ axiosInstance.interceptors.response.use(
       localStorage.removeItem('token');
       window.location.href = '/login';
     }
+    
+    // Handle 429 (Too Many Requests) errors gracefully
+    if (error.response?.status === 429) {
+      const retryAfter = error.response.headers['retry-after'];
+      const delay = retryAfter ? parseInt(retryAfter) * 1000 : 5000; // Default 5 seconds
+      
+      // Log warning but don't retry automatically
+      console.warn(`Rate limit exceeded. Please wait ${delay / 1000} seconds before trying again.`);
+      
+      // Don't retry automatically - let the component handle it
+      return Promise.reject(error);
+    }
+    
     return Promise.reject(error);
   }
 );

@@ -2130,6 +2130,7 @@ const AdminDashboard = () => {
                         <option value="">Select Role</option>
                         <option value="customer">Customer</option>
                         <option value="seller">Seller</option>
+                        <option value="admin">Admin</option>
                       </select>
                       <select className="form-input" value={editUserForm.isActive === true ? 'active' : editUserForm.isActive === false ? 'blocked' : ''} onChange={e => setEditUserForm({ ...editUserForm, isActive: e.target.value === 'active' })} required>
                         <option value="">Select Status</option>

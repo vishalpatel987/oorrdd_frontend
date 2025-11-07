@@ -29,8 +29,8 @@ const AdBanner = () => {
         const cacheTime = localStorage.getItem(cacheKey + '_time');
         const now = Date.now();
 
-        // Use cache if it's less than 10 seconds old and contains banners
-        if (cachedData && cacheTime && (now - parseInt(cacheTime)) < 10000) {
+        // Use cache if it's less than 5 minutes old and contains banners
+        if (cachedData && cacheTime && (now - parseInt(cacheTime)) < 300000) {
           try {
             const cachedBanners = JSON.parse(cachedData);
             if (Array.isArray(cachedBanners) && cachedBanners.length > 0) {
@@ -84,28 +84,53 @@ const AdBanner = () => {
     }
   }, []);
 
+  // Use ref to prevent duplicate calls from React StrictMode
+  const hasFetchedRef = useRef(false);
+  
   // Initial fetch and refresh on mount
   useEffect(() => {
-    fetchBanners(true); // Skip cache on mount
+    // Prevent duplicate calls from StrictMode double rendering
+    if (hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
+    
+    // Small delay on initial load to avoid rate limiting with other components
+    const initialTimeout = setTimeout(() => {
+      fetchBanners(true); // Skip cache on mount
+    }, 300); // 300ms delay
 
-    // Refresh banners every 10 seconds
+    // Refresh banners every 5 minutes (300000ms) instead of 10 seconds
+    // This prevents too many API calls
     const refreshInterval = setInterval(() => {
-      fetchBanners(true);
-    }, 10000);
+      fetchBanners(false); // Use cache if available
+    }, 300000); // 5 minutes
 
-    return () => clearInterval(refreshInterval);
+    return () => {
+      clearTimeout(initialTimeout);
+      clearInterval(refreshInterval);
+    };
   }, [fetchBanners]);
 
   // Refresh banners when page becomes visible or window gains focus
+  // But only if cache is older than 2 minutes
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (!document.hidden) {
-        fetchBanners(true);
+        const cacheTime = localStorage.getItem('banners_cache_time');
+        const now = Date.now();
+        // Only refresh if cache is older than 2 minutes
+        if (!cacheTime || (now - parseInt(cacheTime)) > 120000) {
+          fetchBanners(false); // Use cache if available
+        }
       }
     };
 
     const handleFocus = () => {
-      fetchBanners(true);
+      const cacheTime = localStorage.getItem('banners_cache_time');
+      const now = Date.now();
+      // Only refresh if cache is older than 2 minutes
+      if (!cacheTime || (now - parseInt(cacheTime)) > 120000) {
+        fetchBanners(false); // Use cache if available
+      }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);

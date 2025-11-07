@@ -4,10 +4,35 @@ import brandAPI from '../../api/brandAPI';
 const BrandMarquee = ({ category }) => {
   const [brands, setBrands] = useState([]);
   const [loading, setLoading] = useState(true);
+  const hasFetchedRef = React.useRef(false);
 
   useEffect(() => {
+    // Prevent duplicate calls from StrictMode double rendering
+    if (hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
+    
     const fetchBrands = async () => {
       try {
+        // Check cache first
+        const cacheKey = 'brands_cache';
+        const cachedData = localStorage.getItem(cacheKey);
+        const cacheTime = localStorage.getItem(cacheKey + '_time');
+        const now = Date.now();
+        
+        // Use cache if it's less than 5 minutes old
+        if (cachedData && cacheTime && (now - parseInt(cacheTime)) < 300000) {
+          try {
+            const cachedBrands = JSON.parse(cachedData);
+            if (Array.isArray(cachedBrands) && cachedBrands.length > 0) {
+              setBrands(cachedBrands);
+              setLoading(false);
+              return;
+            }
+          } catch (e) {
+            // Invalid cache, continue to fetch
+          }
+        }
+        
         setLoading(true);
         const params = category ? { category } : {};
         const response = await brandAPI.getAllBrands(params);
@@ -15,6 +40,12 @@ const BrandMarquee = ({ category }) => {
         if (response.data && response.data.success) {
           const fetchedBrands = response.data.data || [];
           setBrands(fetchedBrands);
+          
+          // Cache the brands
+          if (fetchedBrands.length > 0) {
+            localStorage.setItem(cacheKey, JSON.stringify(fetchedBrands));
+            localStorage.setItem(cacheKey + '_time', Date.now().toString());
+          }
         } else {
           setBrands([]);
         }
@@ -26,7 +57,12 @@ const BrandMarquee = ({ category }) => {
       }
     };
 
-    fetchBrands();
+    // Delay fetch to avoid rate limiting on page load
+    const timeoutId = setTimeout(() => {
+      fetchBrands();
+    }, 1000);
+
+    return () => clearTimeout(timeoutId);
   }, [category]);
 
   const getBrandLogo = (brand) => {

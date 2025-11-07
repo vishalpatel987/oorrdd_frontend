@@ -11,6 +11,7 @@ const AdminRegister = () => {
     email: '',
     password: '',
     confirmPassword: '',
+    adminCode: '',
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -62,6 +63,10 @@ const AdminRegister = () => {
       newErrors.confirmPassword = 'Passwords do not match';
     }
 
+    if (!formData.adminCode.trim()) {
+      newErrors.adminCode = 'Admin access code is required';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -92,6 +97,7 @@ const AdminRegister = () => {
         name: formData.name.trim(),
         email: formData.email.trim(),
         password: formData.password,
+        adminCode: formData.adminCode.trim(),
       })).unwrap();
       setOtpPhase(true);
       toast.success('OTP sent to your email. Please verify to activate your admin account.');
@@ -124,7 +130,7 @@ const AdminRegister = () => {
         <div className="text-center">
           <h2 className="text-3xl font-bold text-gray-900">Admin Registration</h2>
           <p className="mt-2 text-sm text-gray-600">
-            Register as an admin (only if no admin exists)
+            Register as an admin using your authorized access code.
           </p>
         </div>
       </div>
@@ -240,6 +246,29 @@ const AdminRegister = () => {
                 </div>
                 {errors.confirmPassword && (
                   <p className="mt-1 text-sm text-red-600">{errors.confirmPassword}</p>
+                )}
+              </div>
+
+              {/* Admin Access Code Field */}
+              <div>
+                <label htmlFor="adminCode" className="form-label">
+                  Admin Access Code
+                </label>
+                <input
+                  id="adminCode"
+                  name="adminCode"
+                  type="text"
+                  required
+                  value={formData.adminCode}
+                  onChange={handleChange}
+                  className={`form-input ${errors.adminCode ? 'border-red-500' : ''}`}
+                  placeholder="Enter the secure admin code"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  You must enter the access code provided by the super admin.
+                </p>
+                {errors.adminCode && (
+                  <p className="mt-1 text-sm text-red-600">{errors.adminCode}</p>
                 )}
               </div>
 
